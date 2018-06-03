@@ -1,0 +1,71 @@
+{
+  "name": "broadcastchannel",
+  "version": "0.0.1",
+  "description": "Broadcast Channel Polyfill. Works with old indexedDB, localStorage, cookies, nodejs",
+  "main": "index.js",
+  "scripts": {
+    "lint": "tslint --project .",
+    "transpile": "rm -rf tmp && tsc -p ./ && echo '# transpile sucess!'",
+    "pretest": "npm run transpile",
+    "test": "npm run test:node && npm run test:browser",
+    "test:node": "npm run pretest && mocha --bail --exit ./tmp/test/index.test.js && npm run clear",
+    "test:browser": "npm run pretest && karma start ./config/karma.conf.js",
+    "clear": "rm -rf ./tmp",
+    "build": "npm run transpile",
+    "dev": "watch 'npm run test:node' src/ test/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pubkey/broadcast-channel.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/pubkey/broadcast-channel/issues"
+  },
+  "homepage": "https://github.com/pubkey/broadcast-channel#readme",
+  "dependencies": {
+    "clone": "2.1.1",
+    "random-token": "0.0.8"
+  },
+  "pre-commit": [
+    "lint"
+  ],
+  "devDependencies": {
+    "@types/clone": "0.1.30",
+    "@types/json-schema": "6.0.1",
+    "@types/mocha": "5.2.1",
+    "@types/node": "10.3.0",
+    "assert": "1.4.1",
+    "async-test-util": "1.5.1",
+    "browserify": "16.2.2",
+    "concurrently": "3.5.1",
+    "delete": "1.1.0",
+    "detect-browser": "2.5.1",
+    "exists-file": "3.0.2",
+    "express": "4.16.3",
+    "karma": "2.0.2",
+    "karma-browserify": "5.2.0",
+    "karma-chrome-launcher": "2.2.0",
+    "karma-coverage": "1.1.2",
+    "karma-detect-browsers": "2.3.2",
+    "karma-edge-launcher": "0.4.2",
+    "karma-firefox-launcher": "1.1.0",
+    "karma-ie-launcher": "1.0.0",
+    "karma-mocha": "1.3.0",
+    "karma-opera-launcher": "1.0.0",
+    "karma-safari-launcher": "1.0.0",
+    "mocha": "5.2.0",
+    "mocha-parallel-tests": "2.0.1",
+    "nconf": "0.10.0",
+    "node": "10.2.0",
+    "pouchdb-adapter-memory": "6.4.3",
+    "pre-commit": "1.2.2",
+    "rimraf": "2.6.2",
+    "shelljs": "0.8.2",
+    "tslint": "5.10.0",
+    "typescript": "2.9.1",
+    "watch": "1.0.2",
+    "watchify": "^3.11.0"
+  }
+}
