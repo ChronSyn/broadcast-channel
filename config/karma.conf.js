@@ -1,56 +1,58 @@
-const testRoot = '../tmp/test/index.test.js';
-module.exports = function (config) {
-    config.set({
-        basePath: '',
-        frameworks: [
-            'mocha',
-            'browserify',
-            'detectBrowsers'
-        ],
-        files: [testRoot],
-        port: 9876,
-        colors: true,
-        autoWatch: false,
+const configuration = {
+    basePath: '',
+    frameworks: [
+        'mocha',
+        'browserify'
+    ],
+    files: [
+        '../test/unit.test.js',
+        '../test/issues.test.js',
+        '../test/performance.test.js'
+    ],
+    port: 9876,
+    colors: true,
+    autoWatch: false,
 
-        /**
-         * see
-         * @link https://github.com/litixsoft/karma-detect-browsers
-         */
-        detectBrowsers: {
-            enabled: true,
-            usePhantomJS: false,
-            postDetection: function (availableBrowser) {
+    // Karma plugins loaded
+    plugins: [
+        'karma-mocha',
+        'karma-browserify',
+        'karma-chrome-launcher'
+    ],
 
-                // return ['Firefox']; // comment in to test specific browser
+    // Source files that you wanna generate coverage for.
+    // Do not include tests or libraries (these files will be instrumented by Istanbul)
+    preprocessors: {
+        '../test/*.test.js': ['browserify']
+    },
 
-                return availableBrowser
-                    .filter(b => !['PhantomJS', 'FirefoxAurora', 'FirefoxNightly'].includes(b));
-            }
-        },
+    client: {
+        mocha: {
+            bail: true,
+            timeout: 6000
+        }
+    },
+    browsers: ['ChromeNoSandbox'],
+    browserDisconnectTimeout: 6000,
+    processKillTimeout: 6000,
+    customLaunchers: {
+        ChromeNoSandbox: {
+            base: 'Chrome',
+            flags: ['--no-sandbox']
+        }
+    },
+    singleRun: true
+};
 
-        // Karma plugins loaded
-        plugins: [
-            'karma-mocha',
-            'karma-browserify',
-            'karma-chrome-launcher',
-            'karma-edge-launcher',
-            'karma-firefox-launcher',
-            'karma-ie-launcher',
-            'karma-opera-launcher',
-            'karma-detect-browsers'
-        ],
+if (process.env.TRAVIS) {
 
-        // Source files that you wanna generate coverage for.
-        // Do not include tests or libraries (these files will be instrumented by Istanbul)
-        preprocessors: {
-            testRoot: ['browserify']
-        },
+    /**
+     * overwrite reporters-default
+     * So no big list will be shown at log
+     */
+    // configuration.reporters = [];
+}
 
-        client: {
-            mocha: {
-                bail: true
-            }
-        },
-        singleRun: true
-    });
+module.exports = function(config) {
+    config.set(configuration);
 };

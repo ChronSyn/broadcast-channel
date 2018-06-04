@@ -11,7 +11,6 @@ declare class BroadcastChannel {
     postMessage(msg: any): void;
     close(): void;
 
-
     // TODO set onmessage(fn: (ev: Event) => void);
     // TODO set onmessageerror(fn: (ev: Event) => void);
 }
