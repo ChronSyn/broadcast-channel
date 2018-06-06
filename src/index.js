@@ -1,7 +1,7 @@
-import NodeIpcMethod from './methods/node-ipc';
+import NodeMethod from './methods/node';
 // order is important
 let METHODS = [
-    NodeIpcMethod
+    NodeMethod
 ];
 
 class BroadcastChannel {
