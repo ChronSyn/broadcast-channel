@@ -23,6 +23,8 @@ const lazyRequireInit = () => {
             util,
             mkdir: util.promisify(fs.mkdir),
             writeFile: util.promisify(fs.writeFile),
+            readFile: util.promisify(fs.readFile),
+            unlink: util.promisify(fs.unlink),
             readdir: util.promisify(fs.readdir),
             randomToken: require('random-token')
         };
@@ -166,10 +168,54 @@ export async function writeMessage(channelName, readerUuid, messageJson) {
     return msgPath;
 }
 
+/**
+ * returns the uuids of all readers
+ * @return {string[]}
+ */
 export async function getReadersUuids(channelName) {
     const readersPath = getPaths(channelName).readers;
     const files = await LAZY.readdir(readersPath);
     return files.map(file => file.split('.')[0]);
+}
+
+export async function getAllMessages(channelName) {
+    const messagesPath = getPaths(channelName).messages;
+    const files = await LAZY.readdir(messagesPath);
+    return files.map(file => {
+        const fileName = file.split('.')[0];
+        const split = fileName.split('_');
+
+        return {
+            path: LAZY.path.join(
+                messagesPath,
+                file
+            ),
+            time: parseInt(split[0]),
+            senderUuid: split[1],
+            token: split[2]
+        };
+    });
+}
+
+export async function readMessage(messageObj) {
+    const content = await LAZY.readFile(messageObj.path, 'utf8');
+    return JSON.parse(content);
+}
+
+/**
+ * after this time the messages gets deleted
+ * It is assumed that all reader have consumed it by then
+ */
+const MESSAGE_TTL = 1000 * 60 * 2; // 2 minutes
+
+export async function cleanOldMessages(messageObjects, ttl = MESSAGE_TTL) {
+    const olderThen = new Date().getTime() - ttl;
+
+    await Promise.all(
+        messageObjects
+        .filter(obj => obj.time < olderThen)
+        .map(obj => LAZY.unlink(obj.path).catch(() => null))
+    );
 }
 
 const NodeIpcMethod = {

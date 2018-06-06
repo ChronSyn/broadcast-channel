@@ -124,4 +124,68 @@ describe('unit/node.method.test.js', () => {
             client.destroy();
         });
     });
+    describe('.getAllMessages()', () => {
+        it('should get all messages', async () => {
+            const channelName = AsyncTestUtil.randomString(12);
+            const readerUuid = AsyncTestUtil.randomString(6);
+            await NodeMethod.ensureFoldersExist(channelName);
+
+            const messageJson = {
+                foo: 'bar'
+            };
+            await NodeMethod.writeMessage(channelName, readerUuid, messageJson);
+            await NodeMethod.writeMessage(channelName, readerUuid, messageJson);
+
+            const messages = await NodeMethod.getAllMessages(channelName);
+            assert.equal(messages.length, 2);
+            assert.ok(messages[0].path);
+            assert.ok(messages[0].time);
+            assert.ok(messages[0].senderUuid);
+            assert.ok(messages[0].token);
+        });
+    });
+    describe('.readMessage()', () => {
+        it('should get the content', async () => {
+            const channelName = AsyncTestUtil.randomString(12);
+            const readerUuid = AsyncTestUtil.randomString(6);
+            await NodeMethod.ensureFoldersExist(channelName);
+
+            const messageJson = {
+                foo: 'bar'
+            };
+            await NodeMethod.writeMessage(channelName, readerUuid, messageJson);
+            const messages = await NodeMethod.getAllMessages(channelName);
+
+            const content = await NodeMethod.readMessage(messages[0]);
+            assert.deepEqual(content.data, messageJson);
+        });
+    });
+    describe('.cleanOldMessages()', () => {
+        it('should clean up the old messages', async () => {
+            const channelName = AsyncTestUtil.randomString(12);
+            const readerUuid = AsyncTestUtil.randomString(6);
+            await NodeMethod.ensureFoldersExist(channelName);
+            const messageJson = {
+                foo: 'bar'
+            };
+
+            // write 5 messages
+            await Promise.all(
+                new Array(5).fill(0)
+                .map(() => NodeMethod.writeMessage(channelName, readerUuid, messageJson))
+            );
+
+            // w8 until they time out
+            await AsyncTestUtil.wait(500);
+
+            // write a new one
+            await NodeMethod.writeMessage(channelName, readerUuid, messageJson);
+
+            const messages = await NodeMethod.getAllMessages(channelName);
+            await NodeMethod.cleanOldMessages(messages, 100);
+
+            const messages2 = await NodeMethod.getAllMessages(channelName);
+            assert.equal(messages2.length, 1);
+        });
+    });
 });
