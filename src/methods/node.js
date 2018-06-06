@@ -21,7 +21,10 @@ const lazyRequireInit = () => {
             fs,
             path: require('path'),
             util,
-            mkdir: util.promisify(fs.mkdir)
+            mkdir: util.promisify(fs.mkdir),
+            writeFile: util.promisify(fs.writeFile),
+            readdir: util.promisify(fs.readdir),
+            randomToken: require('random-token')
         };
     }
 };
@@ -76,7 +79,7 @@ export function socketPath(channelName, readerUuid) {
     const paths = getPaths(channelName);
     const socketPath = LAZY.path.join(
         paths.readers,
-        readerUuid
+        readerUuid + '.sock'
     );
     return socketPath;
 }
@@ -118,6 +121,55 @@ export async function createSocketEventEmitter(channelName, readerUuid) {
         emitter,
         server
     };
+}
+
+export async function openClientConnection(channelName, readerUuid) {
+    const pathToSocket = socketPath(channelName, readerUuid);
+    const client = new LAZY.net.Socket();
+    await new Promise(res => {
+        client.connect(
+            pathToSocket,
+            () => {
+                console.log('client: Connected');
+                res();
+            }
+        );
+    });
+    return client;
+}
+
+
+/**
+ * writes the new message to the file-system
+ * so other readers can find it
+ */
+export async function writeMessage(channelName, readerUuid, messageJson) {
+    const time = new Date().getTime();
+    const writeObject = {
+        uuid: readerUuid,
+        time,
+        data: messageJson
+    };
+
+    const fileName = time + '_' + readerUuid + '_' + LAZY.randomToken(8) + '.json';
+
+    const msgPath = LAZY.path.join(
+        getPaths(channelName).messages,
+        fileName
+    );
+
+    await LAZY.writeFile(
+        msgPath,
+        JSON.stringify(writeObject)
+    );
+
+    return msgPath;
+}
+
+export async function getReadersUuids(channelName) {
+    const readersPath = getPaths(channelName).readers;
+    const files = await LAZY.readdir(readersPath);
+    return files.map(file => file.split('.')[0]);
 }
 
 const NodeIpcMethod = {
