@@ -1,6 +1,5 @@
 const AsyncTestUtil = require('async-test-util');
 const assert = require('assert');
-const BroadcastChannel = require('../../dist/lib/index').default;
 const NodeMethod = require('../../dist/lib/methods/node.js');
 
 describe('unit/node.method.test.js', () => {
@@ -186,6 +185,53 @@ describe('unit/node.method.test.js', () => {
 
             const messages2 = await NodeMethod.getAllMessages(channelName);
             assert.equal(messages2.length, 1);
+        });
+    });
+    describe('core-functions', () => {
+        describe('.create()', () => {
+            it('should open a channel', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channelState = await NodeMethod.create(channelName);
+                assert.ok(channelState);
+                await NodeMethod.close(channelState);
+            });
+            it('should have connected to other readers', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channelState1 = await NodeMethod.create(channelName);
+                const channelState2 = await NodeMethod.create(channelName);
+                assert.ok(channelState1);
+                assert.ok(channelState2);
+
+                await NodeMethod.close(channelState1);
+                await NodeMethod.close(channelState2);
+            });
+        });
+        describe('.postMessage()', () => {
+            it('should send the message', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channelStateOther = await NodeMethod.create(channelName);
+                const channelStateOwn = await NodeMethod.create(channelName);
+
+                const emittedOther = [];
+                const emittedOwn = [];
+
+                channelStateOther.socketEE.emitter.on('data', d => emittedOther.push(d));
+                channelStateOwn.socketEE.emitter.on('data', d => emittedOwn.push(d));
+
+                const msgJson = {
+                    foo: 'bar'
+                };
+                await NodeMethod.postMessage(channelStateOwn, msgJson);
+
+                await AsyncTestUtil.waitUntil(() => emittedOwn.length === 1);
+                await AsyncTestUtil.waitUntil(() => emittedOther.length === 1);
+
+                assert.deepEqual(emittedOwn[0], msgJson);
+
+                console.dir(channelStateOwn);
+                await NodeMethod.close(channelStateOther);
+                await NodeMethod.close(channelStateOwn);
+            });
         });
     });
 });

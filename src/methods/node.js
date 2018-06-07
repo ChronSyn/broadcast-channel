@@ -218,15 +218,87 @@ export async function cleanOldMessages(messageObjects, ttl = MESSAGE_TTL) {
     );
 }
 
-const NodeIpcMethod = {
+
+
+export const type = 'node';
+
+export async function create(channelName) {
+    lazyRequireInit();
+    await ensureFoldersExist(channelName);
+
+    const uuid = LAZY.randomToken(10);
+
+    const [
+        otherReaderUuids,
+        socketEE
+    ] = await Promise.all([
+        getReadersUuids(channelName),
+        createSocketEventEmitter(channelName, uuid)
+    ]);
+
+    const otherReaderClients = {};
+    await Promise.all(
+        otherReaderUuids
+        .filter(readerUuid => readerUuid !== uuid) // not own
+        .map(async (readerUuid) => {
+            const client = await openClientConnection(channelName, readerUuid);
+            otherReaderClients[readerUuid] = client;
+        })
+    );
+
+    const state = {
+        channelName: channelName,
+        uuid,
+        startTime: new Date().getTime(),
+        socketEE,
+        otherReaderUuids,
+        otherReaderClients,
+    };
+
+
+    return state;
+}
+
+
+export async function postMessage(channelState, messageJson) {
+
+    // ensure we have subscribed to all readers
+    const otherReaders = await getReadersUuids(channelState.channelName);
+    await Promise.all(
+        otherReaders
+        .filter(readerUuid => readerUuid !== channelState.uuid) // not own
+        .filter(readerUuid => !channelState.otherReaderClients[readerUuid]) // not already has client
+        .map(async (readerUuid) => {
+            const client = await openClientConnection(channelState.channelName, readerUuid);
+            channelState.otherReaderClients[readerUuid] = client;
+        })
+    );
+
+    // write message to fs
+    await writeMessage(
+        channelState.channelName,
+        channelState.uuid,
+        messageJson
+    );
+
+    // ping other readers
+    await Promise.all(
+        Object.values(channelState.otherReaderClients)
+        .map(client => client.write('new'))
+    );
+
+    // emit to own eventEmitter
+    channelState.socketEE.emitter.emit('data', JSON.parse(JSON.stringify(messageJson)));
+}
+
+// TODO
+export async function close(channelState) {}
+
+const NodeMethod = {
     get type() {
-        return 'node-ipc';
+        return 'node';
     },
     async create(name) {
-        //        const RawIPC = lazyRequire('node-ipc').IPC;
-        //        const ipc = new RawIPC;
-
-        const ipc = lazyRequire('node-ipc');
         console.log('00');
         ipc.config.id = name;
         ipc.config.retry = 1500;
@@ -286,4 +358,4 @@ const NodeIpcMethod = {
     }
 };
 
-export default NodeIpcMethod;
+export default NodeMethod;
