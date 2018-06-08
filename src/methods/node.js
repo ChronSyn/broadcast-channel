@@ -224,6 +224,7 @@ export const type = 'node';
 
 export async function create(channelName, options = {}) {
     lazyRequireInit();
+    const startTime = new Date().getTime();
 
     // set defaults
     if (!options.node) options.node = {};
@@ -263,12 +264,20 @@ export async function create(channelName, options = {}) {
 
     // when new message comes in, we read it and emit it
     socketEE.emitter.on('data', async () => {
+
+        /**
+         * if we have 2 or more read-tasks in the queue,
+         * we do not have to set more
+         */
+        if (readQueue._idleCalls.size > 1) return;
+
         await readQueue.requestIdlePromise();
         await readQueue.wrapCall(
             async () => {
                 const messages = await getAllMessages(channelName);
                 const nonEmitted = messages.filter(msgObj => !emittedMessagesIds.has(msgObj.token));
-                const timeSorted = nonEmitted.sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time);
+                const notTooOld = nonEmitted.filter(msgObj => msgObj.time > startTime);
+                const timeSorted = notTooOld.sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time);
 
                 for (const msgObj of timeSorted) {
                     const content = await readMessage(msgObj);
@@ -294,7 +303,7 @@ export async function create(channelName, options = {}) {
         channelName,
         options,
         uuid,
-        startTime: new Date().getTime(),
+        startTime,
         socketEE,
         messagesEE,
         readQueue,

@@ -312,8 +312,6 @@ describe('unit/node.method.test.js', () => {
             const channelName = AsyncTestUtil.randomString(12);
             const channelStateOther = await NodeMethod.create(channelName, channelOptions);
             const channelStateOwn = await NodeMethod.create(channelName, channelOptions);
-            const emittedOther = [];
-            channelStateOther.socketEE.emitter.on('data', d => emittedOther.push(d));
             const msgJson = {
                 foo: 'bar'
             };
@@ -337,6 +335,36 @@ describe('unit/node.method.test.js', () => {
             const messages = await NodeMethod.getAllMessages(channelName);
             assert.equal(messages.length, 100);
 
+
+            await NodeMethod.close(channelStateOther);
+            await NodeMethod.close(channelStateOwn);
+        });
+        it('should not read messages created before the channel was created', async () => {
+            const channelOptions = {
+                node: {
+                    ttl: 5000
+                }
+            };
+            const channelName = AsyncTestUtil.randomString(12);
+            const channelStateOwn = await NodeMethod.create(channelName, channelOptions);
+            const msgJson = {
+                foo: 'bar'
+            };
+
+
+            await NodeMethod.postMessage(channelStateOwn, msgJson);
+
+            const emittedOther = [];
+            const channelStateOther = await NodeMethod.create(channelName, channelOptions);
+            NodeMethod.onMessage(channelStateOther, msg => emittedOther.push(msg));
+
+            await NodeMethod.postMessage(channelStateOwn, msgJson);
+            await NodeMethod.postMessage(channelStateOwn, msgJson);
+
+            await AsyncTestUtil.waitUntil(() => emittedOther.length >= 2);
+            await AsyncTestUtil.wait(100);
+
+            assert.equal(emittedOther.length, 2);
 
             await NodeMethod.close(channelStateOther);
             await NodeMethod.close(channelStateOwn);
