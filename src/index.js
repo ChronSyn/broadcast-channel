@@ -1,8 +1,19 @@
-import NodeMethod from './methods/node';
+import isNode from 'detect-node';
+
 // order is important
 let METHODS = [
     NodeMethod
 ];
+
+/**
+ * this is loaded lazy
+ * so it will not get bundled in browser-builds
+ */
+if (isNode) {
+    const NodeMethod = require('./methods/node');
+    METHODS.push(NodeMethod);
+}
+
 
 class BroadcastChannel {
     constructor(name, options) {

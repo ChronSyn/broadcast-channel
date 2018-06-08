@@ -3,56 +3,49 @@
  * The ipc is handled via sockets and file-writes to the tmp-folder
  */
 
-import isNode from 'detect-node';
+import * as util from 'util';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as events from 'events';
+import * as net from 'net';
+import * as path from 'path';
 
-let LAZY;
-/**
- * modules are loaded async
- * so they will not get bundled when this is used in browsers
- */
-const lazyRequireInit = () => {
-    if (!LAZY) {
-        const util = require('util');
-        const fs = require('fs');
-        LAZY = {
-            os: require('os'),
-            events: require('events'),
-            net: require('net'),
-            fs,
-            path: require('path'),
-            util,
-            mkdir: util.promisify(fs.mkdir),
-            writeFile: util.promisify(fs.writeFile),
-            readFile: util.promisify(fs.readFile),
-            unlink: util.promisify(fs.unlink),
-            readdir: util.promisify(fs.readdir),
-            randomToken: require('random-token'),
-            IdleQueue: require('custom-idle-queue'),
-            randomInt: require('random-int')
-        };
-    }
-};
+import isNode from 'detect-node';
+import randomToken from 'random-token';
+import IdleQueue from 'custom-idle-queue';
+import randomInt from 'random-int';
+import unload from 'unload';
+
+const mkdir = util.promisify(fs.mkdir);
+const writeFile = util.promisify(fs.writeFile);
+const readFile = util.promisify(fs.readFile);
+const unlink = util.promisify(fs.unlink);
+const readdir = util.promisify(fs.readdir);
+
 
 const TMP_FOLDER_NAME = 'pubkey.broadcast-channel';
-
+/**
+ * after this time the messages gets deleted
+ * It is assumed that all reader have consumed it by then
+ */
+const MESSAGE_TTL = 1000 * 60 * 2; // 2 minutes
 
 export function getPaths(channelName) {
-    lazyRequireInit();
 
-    const folderPathBase = LAZY.path.join(
-        LAZY.os.tmpdir(),
+    const folderPathBase = path.join(
+        os.tmpdir(),
         TMP_FOLDER_NAME
     );
-    const channelPathBase = LAZY.path.join(
-        LAZY.os.tmpdir(),
+    const channelPathBase = path.join(
+        os.tmpdir(),
         TMP_FOLDER_NAME,
         channelName
     );
-    const folderPathReaders = LAZY.path.join(
+    const folderPathReaders = path.join(
         channelPathBase,
         'readers'
     );
-    const folderPathMessages = LAZY.path.join(
+    const folderPathMessages = path.join(
         channelPathBase,
         'messages'
     );
@@ -66,22 +59,22 @@ export function getPaths(channelName) {
 }
 
 export async function ensureFoldersExist(channelName) {
-    lazyRequireInit();
+
     const paths = getPaths(channelName);
 
 
-    await LAZY.mkdir(paths.base).catch(() => null);
-    await LAZY.mkdir(paths.channelBase).catch(() => null);
+    await mkdir(paths.base).catch(() => null);
+    await mkdir(paths.channelBase).catch(() => null);
     await Promise.all([
-        await LAZY.mkdir(paths.readers).catch(() => null),
-        await LAZY.mkdir(paths.messages).catch(() => null)
+        await mkdir(paths.readers).catch(() => null),
+        await mkdir(paths.messages).catch(() => null)
     ]);
 };
 
 export function socketPath(channelName, readerUuid) {
-    lazyRequireInit();
+
     const paths = getPaths(channelName);
-    const socketPath = LAZY.path.join(
+    const socketPath = path.join(
         paths.readers,
         readerUuid + '.sock'
     );
@@ -95,11 +88,11 @@ export function socketPath(channelName, readerUuid) {
 export async function createSocketEventEmitter(channelName, readerUuid) {
     const pathToSocket = socketPath(channelName, readerUuid);
 
-    const emitter = new LAZY.events.EventEmitter();
-    const server = LAZY.net
+    const emitter = new events.EventEmitter();
+    const server = net
         .createServer(stream => {
             stream.on('end', function() {
-                console.log('server: end');
+                // console.log('server: end');
             });
 
             stream.on('data', function(msg) {
@@ -115,7 +108,7 @@ export async function createSocketEventEmitter(channelName, readerUuid) {
         });
     });
     server.on('connection', () => {
-        console.log('server: Client connected.');
+        // console.log('server: Client connected.');
     });
 
     return {
@@ -127,14 +120,11 @@ export async function createSocketEventEmitter(channelName, readerUuid) {
 
 export async function openClientConnection(channelName, readerUuid) {
     const pathToSocket = socketPath(channelName, readerUuid);
-    const client = new LAZY.net.Socket();
+    const client = new net.Socket();
     await new Promise(res => {
         client.connect(
             pathToSocket,
-            () => {
-                console.log('client: Connected');
-                res();
-            }
+            res
         );
     });
     return client;
@@ -153,14 +143,14 @@ export async function writeMessage(channelName, readerUuid, messageJson) {
         data: messageJson
     };
 
-    const fileName = time + '_' + readerUuid + '_' + LAZY.randomToken(12) + '.json';
+    const fileName = time + '_' + readerUuid + '_' + randomToken(12) + '.json';
 
-    const msgPath = LAZY.path.join(
+    const msgPath = path.join(
         getPaths(channelName).messages,
         fileName
     );
 
-    await LAZY.writeFile(
+    await writeFile(
         msgPath,
         JSON.stringify(writeObject)
     );
@@ -174,19 +164,19 @@ export async function writeMessage(channelName, readerUuid, messageJson) {
  */
 export async function getReadersUuids(channelName) {
     const readersPath = getPaths(channelName).readers;
-    const files = await LAZY.readdir(readersPath);
+    const files = await readdir(readersPath);
     return files.map(file => file.split('.')[0]);
 }
 
 export async function getAllMessages(channelName) {
     const messagesPath = getPaths(channelName).messages;
-    const files = await LAZY.readdir(messagesPath);
+    const files = await readdir(messagesPath);
     return files.map(file => {
         const fileName = file.split('.')[0];
         const split = fileName.split('_');
 
         return {
-            path: LAZY.path.join(
+            path: path.join(
                 messagesPath,
                 file
             ),
@@ -198,15 +188,9 @@ export async function getAllMessages(channelName) {
 }
 
 export async function readMessage(messageObj) {
-    const content = await LAZY.readFile(messageObj.path, 'utf8');
+    const content = await readFile(messageObj.path, 'utf8');
     return JSON.parse(content);
 }
-
-/**
- * after this time the messages gets deleted
- * It is assumed that all reader have consumed it by then
- */
-const MESSAGE_TTL = 1000 * 60 * 2; // 2 minutes
 
 export async function cleanOldMessages(messageObjects, ttl = MESSAGE_TTL) {
     const olderThen = new Date().getTime() - ttl;
@@ -214,7 +198,7 @@ export async function cleanOldMessages(messageObjects, ttl = MESSAGE_TTL) {
     await Promise.all(
         messageObjects
         .filter(obj => obj.time < olderThen)
-        .map(obj => LAZY.unlink(obj.path).catch(() => null))
+        .map(obj => unlink(obj.path).catch(() => null))
     );
 }
 
@@ -223,7 +207,7 @@ export async function cleanOldMessages(messageObjects, ttl = MESSAGE_TTL) {
 export const type = 'node';
 
 export async function create(channelName, options = {}) {
-    lazyRequireInit();
+
     const startTime = new Date().getTime();
 
     // set defaults
@@ -232,8 +216,8 @@ export async function create(channelName, options = {}) {
 
     await ensureFoldersExist(channelName);
 
-    const uuid = LAZY.randomToken(10);
-    const messagesEE = new LAZY.events.EventEmitter();
+    const uuid = randomToken(10);
+    const messagesEE = new events.EventEmitter();
 
     const [
         otherReaderUuids,
@@ -259,8 +243,8 @@ export async function create(channelName, options = {}) {
     const emittedMessagesIds = new Set();
 
     // ensures we do not read messages in parrallel
-    const readQueue = new LAZY.IdleQueue(1);
-    const writeQueue = new LAZY.IdleQueue(1);
+    const readQueue = new IdleQueue(1);
+    const writeQueue = new IdleQueue(1);
 
     // when new message comes in, we read it and emit it
     socketEE.emitter.on('data', async () => {
@@ -291,7 +275,7 @@ export async function create(channelName, options = {}) {
                  * to not waste resources on cleaning up,
                  * only if random-int matches, we clean up old messages
                  */
-                const r = LAZY.randomInt(0, Object.keys(otherReaderClients).length * 5);
+                const r = randomInt(0, Object.keys(otherReaderClients).length * 5);
                 if (r === 0)
                     await cleanOldMessages(messages, options.node.ttl);
             }
@@ -310,8 +294,9 @@ export async function create(channelName, options = {}) {
         writeQueue,
         otherReaderUuids,
         otherReaderClients,
+        // ensure if process crashes, everything is cleaned up
+        removeUnload: unload.add(() => close(state))
     };
-
 
     return state;
 }
@@ -362,13 +347,11 @@ export async function postMessage(channelState, messageJson) {
 
 
 export function onMessage(channelState, fn) {
-    channelState.messagesEE.on('message', msg => {
-        console.log('messagesEE.on');
-        fn(msg);
-    });
+    channelState.messagesEE.on('message', msg => fn(msg));
 }
 
-export async function close(channelState) {
+export function close(channelState) {
+    channelState.removeUnload();
     channelState.socketEE.server.close();
     channelState.socketEE.emitter.removeAllListeners();
     channelState.messagesEE.removeAllListeners();
@@ -381,4 +364,4 @@ export async function close(channelState) {
 
 export function canBeUsed() {
     return isNode;
-}
+};

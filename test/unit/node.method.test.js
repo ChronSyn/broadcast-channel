@@ -3,6 +3,9 @@ const assert = require('assert');
 const NodeMethod = require('../../dist/lib/methods/node.js');
 
 describe('unit/node.method.test.js', () => {
+    it('init', () => {
+        process.setMaxListeners(0);
+    });
 
     describe('.getPaths()', () => {
         it('should get the correct paths', () => {
@@ -51,7 +54,6 @@ describe('unit/node.method.test.js', () => {
                 client.connect(
                     socket.path,
                     () => {
-                        console.log('client: Connected');
                         res();
                     }
                 );
@@ -228,7 +230,6 @@ describe('unit/node.method.test.js', () => {
 
                 assert.deepEqual(emittedOwn[0], msgJson);
 
-                console.dir(channelStateOwn);
                 await NodeMethod.close(channelStateOther);
                 await NodeMethod.close(channelStateOwn);
             });
@@ -368,6 +369,43 @@ describe('unit/node.method.test.js', () => {
 
             await NodeMethod.close(channelStateOther);
             await NodeMethod.close(channelStateOwn);
+        });
+        it('should work with many readers', async () => {
+            const channelName = AsyncTestUtil.randomString(12);
+            const readers = await Promise.all(
+                new Array(50).fill(0)
+                .map(async () => {
+                    const channelState = await NodeMethod.create(channelName);
+                    const emitted = [];
+                    NodeMethod.onMessage(channelState, msg => emitted.push(msg));
+                    return {
+                        channelState,
+                        emitted
+                    };
+                })
+            );
+
+            // send 100 messages
+            await Promise.all(
+                new Array(100).fill(0)
+                .map(() => NodeMethod.postMessage(readers[5].channelState, {
+                    foo: 'bar'
+                }))
+            );
+
+            await AsyncTestUtil.waitUntil(() => {
+                let ok = true;
+                readers.forEach(reader => {
+                    if (reader.emitted.length !== 100)
+                        ok = false;
+                });
+
+                return ok;
+            });
+
+            await Promise.all(
+                readers.map(reader => NodeMethod.close(reader.channelState))
+            );
         });
     });
 });
