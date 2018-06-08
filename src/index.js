@@ -2,7 +2,6 @@ import isNode from 'detect-node';
 
 // order is important
 let METHODS = [
-    NodeMethod
 ];
 
 /**
@@ -10,7 +9,7 @@ let METHODS = [
  * so it will not get bundled in browser-builds
  */
 if (isNode) {
-    const NodeMethod = require('./methods/node');
+    const NodeMethod = require('./methods/node.js');
     METHODS.push(NodeMethod);
 }
 
@@ -42,7 +41,7 @@ class BroadcastChannel {
     }
     set onmessage(fn) {
         this._preparePromise.then(() => {
-            this.method.onmessage(
+            this.method.onMessage(
                 this.methodInstance,
                 fn
             );
@@ -68,3 +67,4 @@ function getFirstUseableMethod() {
 }
 
 export default BroadcastChannel;
+module.exports = BroadcastChannel;
