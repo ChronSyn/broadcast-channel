@@ -1,7 +1,10 @@
 import isNode from 'detect-node';
 
+import * as IndexeDbMethod from './methods/indexed-db';
+
 // order is important
 let METHODS = [
+    IndexeDbMethod
 ];
 
 /**

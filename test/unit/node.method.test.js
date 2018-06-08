@@ -1,12 +1,17 @@
 const AsyncTestUtil = require('async-test-util');
 const assert = require('assert');
-const NodeMethod = require('../../dist/lib/methods/node.js');
+const isNode = require('detect-node');
 
 describe('unit/node.method.test.js', () => {
+    /**
+     * do not run in browser-tests
+     */
+    if(!isNode) return;
+    const NodeMethod = require('../../dist/lib/methods/node.js');
+
     it('init', () => {
         process.setMaxListeners(0);
     });
-
     describe('.getPaths()', () => {
         it('should get the correct paths', () => {
             const channelName = AsyncTestUtil.randomString(12);

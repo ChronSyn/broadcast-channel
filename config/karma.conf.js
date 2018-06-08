@@ -2,22 +2,46 @@ const configuration = {
     basePath: '',
     frameworks: [
         'mocha',
-        'browserify'
+        'browserify',
+        'detectBrowsers'
     ],
     files: [
-        '../test/unit.test.js',
-        '../test/issues.test.js',
-        '../test/performance.test.js'
+        '../test/index.test.js'
     ],
     port: 9876,
     colors: true,
     autoWatch: false,
 
+    /**
+     * see
+     * @link https://github.com/litixsoft/karma-detect-browsers
+     */
+    detectBrowsers: {
+        enabled: true,
+        usePhantomJS: false,
+        postDetection: function(availableBrowser) {
+            return ['Chrome']; // comment in to test specific browser
+            // return ['Firefox']; // comment in to test specific browser
+            const browsers = availableBrowser
+                .filter(b => !['PhantomJS', 'FirefoxAurora', 'FirefoxNightly'].includes(b))
+                .map(b => {
+                    if (b === 'Chrome') return 'ChromeNoSandbox';
+                    else return b;
+                });
+            return browsers;
+        }
+    },
+
     // Karma plugins loaded
     plugins: [
         'karma-mocha',
         'karma-browserify',
-        'karma-chrome-launcher'
+        'karma-chrome-launcher',
+        'karma-edge-launcher',
+        'karma-firefox-launcher',
+        'karma-ie-launcher',
+        'karma-opera-launcher',
+        'karma-detect-browsers'
     ],
 
     // Source files that you wanna generate coverage for.
