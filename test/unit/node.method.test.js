@@ -233,5 +233,73 @@ describe('unit/node.method.test.js', () => {
                 await NodeMethod.close(channelStateOwn);
             });
         });
+        describe('.onMessage()', () => {
+            it('should emit the message on self', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channelStateOwn = await NodeMethod.create(channelName);
+
+                const msgJson = {
+                    foo: 'bar'
+                };
+
+                const emitted = [];
+                NodeMethod.onMessage(channelStateOwn, msg => emitted.push(msg));
+
+                NodeMethod.postMessage(channelStateOwn, msgJson);
+
+                await AsyncTestUtil.waitUntil(() => emitted.length === 1);
+                assert.deepEqual(emitted[0], msgJson);
+
+                await NodeMethod.close(channelStateOwn);
+            });
+            it('should emit the message on other', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channelStateOther = await NodeMethod.create(channelName);
+                const channelStateOwn = await NodeMethod.create(channelName);
+
+                const emittedOther = [];
+                const emittedOwn = [];
+                const msgJson = {
+                    foo: 'bar'
+                };
+
+                NodeMethod.onMessage(channelStateOther, msg => emittedOther.push(msg));
+                NodeMethod.onMessage(channelStateOwn, msg => emittedOwn.push(msg));
+
+                await NodeMethod.postMessage(channelStateOwn, msgJson);
+
+
+
+                await AsyncTestUtil.waitUntil(() => emittedOwn.length === 1);
+                await AsyncTestUtil.waitUntil(() => emittedOther.length === 1);
+
+                assert.deepEqual(emittedOwn[0], msgJson);
+                assert.deepEqual(emittedOther[0], msgJson);
+
+                await NodeMethod.close(channelStateOther);
+                await NodeMethod.close(channelStateOwn);
+            });
+            it('should have sorted the messages by time', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channelStateOwn = await NodeMethod.create(channelName);
+
+                const emitted = [];
+                NodeMethod.onMessage(channelStateOwn, msg => emitted.push(msg));
+
+                NodeMethod.postMessage(channelStateOwn, {
+                    foo: 0
+                });
+                NodeMethod.postMessage(channelStateOwn, {
+                    foo: 1
+                });
+
+                await AsyncTestUtil.waitUntil(() => emitted.length === 2);
+
+                assert.equal(emitted[0].foo, 0);
+                assert.equal(emitted[1].foo, 1);
+
+                await NodeMethod.close(channelStateOwn);
+            });
+        });
     });
 });

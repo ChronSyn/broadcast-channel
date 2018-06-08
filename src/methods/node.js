@@ -26,7 +26,8 @@ const lazyRequireInit = () => {
             readFile: util.promisify(fs.readFile),
             unlink: util.promisify(fs.unlink),
             readdir: util.promisify(fs.readdir),
-            randomToken: require('random-token')
+            randomToken: require('random-token'),
+            IdleQueue: require('custom-idle-queue')
         };
     }
 };
@@ -96,8 +97,6 @@ export async function createSocketEventEmitter(channelName, readerUuid) {
     const emitter = new LAZY.events.EventEmitter();
     const server = LAZY.net
         .createServer(stream => {
-            console.log('Connection acknowledged.');
-
             stream.on('end', function() {
                 console.log('server: end');
             });
@@ -153,7 +152,7 @@ export async function writeMessage(channelName, readerUuid, messageJson) {
         data: messageJson
     };
 
-    const fileName = time + '_' + readerUuid + '_' + LAZY.randomToken(8) + '.json';
+    const fileName = time + '_' + readerUuid + '_' + LAZY.randomToken(12) + '.json';
 
     const msgPath = LAZY.path.join(
         getPaths(channelName).messages,
@@ -222,11 +221,17 @@ export async function cleanOldMessages(messageObjects, ttl = MESSAGE_TTL) {
 
 export const type = 'node';
 
-export async function create(channelName) {
+export async function create(channelName, options = {}) {
     lazyRequireInit();
+
+    // set defaults
+    if (!options.node) options.node = {};
+    if (!options.node.ttl) options.node.ttl = MESSAGE_TTL;
+
     await ensureFoldersExist(channelName);
 
     const uuid = LAZY.randomToken(10);
+    const messagesEE = new LAZY.events.EventEmitter();
 
     const [
         otherReaderUuids,
@@ -246,11 +251,45 @@ export async function create(channelName) {
         })
     );
 
+
+
+    // contains all messages that have been emitted before
+    const emittedMessagesIds = new Set();
+
+    // ensures we do not read messages in parrallel
+    const readQueue = new LAZY.IdleQueue(1);
+    const writeQueue = new LAZY.IdleQueue(1);
+
+    // when new message comes in, we read it and emit it
+    socketEE.emitter.on('data', async () => {
+        await readQueue.requestIdlePromise();
+        await readQueue.wrapCall(
+            async () => {
+                const messages = await getAllMessages(channelName);
+                const nonEmitted = messages.filter(msgObj => !emittedMessagesIds.has(msgObj.token));
+                const timeSorted = nonEmitted.sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time);
+
+                for (const msgObj of timeSorted) {
+                    const content = await readMessage(msgObj);
+                    emittedMessagesIds.add(msgObj.token);
+                    setTimeout(() => emittedMessagesIds.delete(msgObj.token), options.node.ttl * 2);
+
+                    messagesEE.emit('message', content.data);
+                }
+            }
+        );
+    });
+
+
     const state = {
-        channelName: channelName,
+        channelName,
+        options,
         uuid,
         startTime: new Date().getTime(),
         socketEE,
+        messagesEE,
+        readQueue,
+        writeQueue,
         otherReaderUuids,
         otherReaderClients,
     };
@@ -264,6 +303,15 @@ export async function postMessage(channelState, messageJson) {
 
     // ensure we have subscribed to all readers
     const otherReaders = await getReadersUuids(channelState.channelName);
+
+    // remove subscriptions to closed readers
+    Object.keys(channelState.otherReaderClients)
+        .filter(readerUuid => !otherReaders.includes(readerUuid))
+        .forEach(readerUuid => {
+            channelState.otherReaderClients[readerUuid].close();
+            delete channelState.otherReaderClients[readerUuid];
+        });
+
     await Promise.all(
         otherReaders
         .filter(readerUuid => readerUuid !== channelState.uuid) // not own
@@ -275,10 +323,13 @@ export async function postMessage(channelState, messageJson) {
     );
 
     // write message to fs
-    await writeMessage(
-        channelState.channelName,
-        channelState.uuid,
-        messageJson
+    await channelState.writeQueue.requestIdlePromise();
+    await channelState.writeQueue.wrapCall(
+        () => writeMessage(
+            channelState.channelName,
+            channelState.uuid,
+            messageJson
+        )
     );
 
     // ping other readers
@@ -291,71 +342,25 @@ export async function postMessage(channelState, messageJson) {
     channelState.socketEE.emitter.emit('data', JSON.parse(JSON.stringify(messageJson)));
 }
 
-// TODO
-export async function close(channelState) {}
 
-const NodeMethod = {
-    get type() {
-        return 'node';
-    },
-    async create(name) {
-        console.log('00');
-        ipc.config.id = name;
-        ipc.config.retry = 1500;
+export function onMessage(channelState, fn) {
+    channelState.messagesEE.on('message', msg => {
+        console.log('messagesEE.on');
+        fn(msg);
+    });
+}
 
-        console.log('01');
-        await ipcServe(ipc);
+export async function close(channelState) {
+    channelState.socketEE.server.close();
+    channelState.socketEE.emitter.removeAllListeners();
+    channelState.messagesEE.removeAllListeners();
+    channelState.readQueue.clear();
+    channelState.writeQueue.clear();
+    Object.values(channelState.otherReaderClients)
+        .forEach(client => client.destroy());
+}
 
-        console.log('11');
 
-        await new Promise(res => {
-            ipc.connectTo(
-                name,
-                //    PREFIX,
-                res
-            );
-        });
-        return {
-            id: name,
-            ipc
-        };
-    },
-    async postMessage(
-        instance,
-        msg
-    ) {
-        instance.ipc.of[instance.id].emit(msg);
-    },
-    async close(
-        instance
-    ) {
-        instance.ipc.disconnect(instance.id);
-    },
-    onmessage(
-        instance,
-        fn
-    ) {
-        console.dir(instance);
-        instance.ipc.of[instance.id].on(
-            'message',
-            data => {
-                console.log('got one data!!');
-                ipc.log('got a message from world : '.debug, data);
-                fn(data);
-            }
-        );
-
-        instance.bc.onmessage = fn;
-    },
-    onmessageerror(
-        instance,
-        fn
-    ) {
-        instance.bc.onmessage = fn;
-    },
-    canBeUsed() {
-        return isNode;
-    }
-};
-
-export default NodeMethod;
+export function canBeUsed() {
+    return isNode;
+}
