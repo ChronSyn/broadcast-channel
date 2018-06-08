@@ -57,8 +57,8 @@ const configuration = {
         }
     },
     browsers: ['ChromeNoSandbox'],
-    browserDisconnectTimeout: 6000,
-    processKillTimeout: 6000,
+    browserDisconnectTimeout: 8000,
+    processKillTimeout: 8000,
     customLaunchers: {
         ChromeNoSandbox: {
             base: 'Chrome',

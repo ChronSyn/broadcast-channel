@@ -12,8 +12,8 @@ import * as path from 'path';
 
 import isNode from 'detect-node';
 import randomToken from 'random-token';
-import IdleQueue from 'custom-idle-queue';
 import randomInt from 'random-int';
+import IdleQueue from 'custom-idle-queue';
 import unload from 'unload';
 
 const mkdir = util.promisify(fs.mkdir);
@@ -236,8 +236,6 @@ export async function create(channelName, options = {}) {
             otherReaderClients[readerUuid] = client;
         })
     );
-
-
 
     // contains all messages that have been emitted before
     const emittedMessagesIds = new Set();

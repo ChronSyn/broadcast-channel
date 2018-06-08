@@ -8,6 +8,8 @@
 
 import isNode from 'detect-node';
 import randomToken from 'random-token';
+import randomInt from 'random-int';
+import IdleQueue from 'custom-idle-queue';
 
 const DB_PREFIX = 'pubkey.broadcast-channel-0-';
 const OBJECT_STORE_ID = 'messages';
@@ -38,7 +40,7 @@ export async function createDatabase(channelName) {
     const openRequest = IndexedDB.open(dbName, 1);
 
     openRequest.onupgradeneeded = ev => {
-        console.log('onupgrade!!');
+        // console.log('onupgrade!!');
         const db = ev.target.result;
         db.createObjectStore(OBJECT_STORE_ID, {
             keyPath: 'token' // primary
@@ -47,7 +49,7 @@ export async function createDatabase(channelName) {
     const db = await new Promise((res, rej) => {
         openRequest.onerror = ev => rej(ev);
         openRequest.onsuccess = () => {
-            console.log('onsuccess');
+            // console.log('onsuccess');
             res(openRequest.result);
         };
     });
@@ -146,16 +148,91 @@ export function removeStorageEventListener(listener) {
 }
 
 export async function create(channelName, options = {}) {
+    const startTime = new Date().getTime();
+    const uuid = randomToken(10);
+
+    // set defaults
+    if (!options.idb) options.idb = {};
+    if (!options.idb.ttl) options.idb.ttl = MESSAGE_TTL;
+
+    // contains all messages that have been emitted before
+    const emittedMessagesIds = new Set();
+
+    const subscriberFunctions = [];
+
+    // ensures we do not read messages in parrallel
+    const readQueue = new IdleQueue(1);
+    const writeQueue = new IdleQueue(1);
+
+    const db = await createDatabase(channelName);
+
+    const listener = addStorageEventListener(
+        channelName,
+        async () => {
+            /**
+             * if we have 2 or more read-tasks in the queue,
+             * we do not have to set more
+             */
+            if (readQueue._idleCalls.size > 1) return;
+            await readQueue.requestIdlePromise();
+            await readQueue.wrapCall(
+                async () => {
+                    const messages = await getAllMessages(db);
+                    const nonEmitted = messages.filter(msgObj => !emittedMessagesIds.has(msgObj.token));
+                    const notTooOld = nonEmitted.filter(msgObj => msgObj.time > startTime);
+                    const timeSorted = notTooOld.sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time);
+
+                    for (const msgObj of timeSorted) {
+                        emittedMessagesIds.add(msgObj.token);
+                        setTimeout(() => emittedMessagesIds.delete(msgObj.token), options.idb.ttl * 2);
+
+                        // emit to all listeners
+                        subscriberFunctions.forEach(fn => fn(msgObj.data));
+                    }
+
+                    const r = randomInt(0, Object.keys(otherReaderClients).length * 5);
+                    if (r === 0)
+                        await cleanOldMessages(db, messages, options.idb.ttl);
+                }
+            );
+        }
+    );
+
 
     const state = {
+        startTime,
         channelName,
-        dbName,
         options,
+        uuid,
+        emittedMessagesIds,
+        subscriberFunctions,
+        readQueue,
+        writeQueue,
         db,
-        objectStore
+        listener
     };
 
     return state;
+}
+
+export function close(channelState) {
+    removeStorageEventListener(channelState.listener);
+    channelState.readQueue.clear();
+    channelState.writeQueue.clear();
+    channelState.db.close();
+}
+
+export async function postMessage(channelState, messageJson) {
+    await writeMessage(
+        channelState.db,
+        channelState.uuid,
+        messageJson
+    );
+    pingOthers(channelState.channelName);
+}
+
+export function onMessage(channelState, fn) {
+    channelState.subscriberFunctions.push(fn);
 }
 
 export function canBeUsed() {
