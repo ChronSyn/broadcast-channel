@@ -27,7 +27,8 @@ const lazyRequireInit = () => {
             unlink: util.promisify(fs.unlink),
             readdir: util.promisify(fs.readdir),
             randomToken: require('random-token'),
-            IdleQueue: require('custom-idle-queue')
+            IdleQueue: require('custom-idle-queue'),
+            randomInt: require('random-int')
         };
     }
 };
@@ -102,8 +103,8 @@ export async function createSocketEventEmitter(channelName, readerUuid) {
             });
 
             stream.on('data', function(msg) {
-                console.log('server: got data:');
-                console.dir(msg.toString());
+                // console.log('server: got data:');
+                // console.dir(msg.toString());
                 emitter.emit('data', msg.toString());
             });
         });
@@ -276,6 +277,14 @@ export async function create(channelName, options = {}) {
 
                     messagesEE.emit('message', content.data);
                 }
+
+                /**
+                 * to not waste resources on cleaning up,
+                 * only if random-int matches, we clean up old messages
+                 */
+                const r = LAZY.randomInt(0, Object.keys(otherReaderClients).length * 5);
+                if (r === 0)
+                    await cleanOldMessages(messages, options.node.ttl);
             }
         );
     });

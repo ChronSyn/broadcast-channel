@@ -302,4 +302,44 @@ describe('unit/node.method.test.js', () => {
             });
         });
     });
+    describe('other', () => {
+        it('should have cleaned up the messages', async () => {
+            const channelOptions = {
+                node: {
+                    ttl: 500
+                }
+            };
+            const channelName = AsyncTestUtil.randomString(12);
+            const channelStateOther = await NodeMethod.create(channelName, channelOptions);
+            const channelStateOwn = await NodeMethod.create(channelName, channelOptions);
+            const emittedOther = [];
+            channelStateOther.socketEE.emitter.on('data', d => emittedOther.push(d));
+            const msgJson = {
+                foo: 'bar'
+            };
+
+            // send 100 messages
+            await Promise.all(
+                new Array(100).fill(0)
+                .map(() => NodeMethod.postMessage(channelStateOwn, msgJson))
+            );
+
+            // w8 until ttl has reached
+            await AsyncTestUtil.wait(channelOptions.node.ttl);
+
+            // send 100 messages again to trigger cleanup
+            await Promise.all(
+                new Array(100).fill(0)
+                .map(() => NodeMethod.postMessage(channelStateOwn, msgJson))
+            );
+
+            // ensure only the last 100 messages are here
+            const messages = await NodeMethod.getAllMessages(channelName);
+            assert.equal(messages.length, 100);
+
+
+            await NodeMethod.close(channelStateOther);
+            await NodeMethod.close(channelStateOwn);
+        });
+    });
 });
