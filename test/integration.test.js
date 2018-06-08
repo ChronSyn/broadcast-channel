@@ -17,6 +17,16 @@ describe('integration.test.js', () => {
             await channel.postMessage('foobar');
             channel.close();
         });
+        it('should throw if channel is already closed', async () => {
+            const channelName = AsyncTestUtil.randomString(12);
+            const channel = new BroadcastChannel(channelName);
+            channel.close();
+            await AsyncTestUtil.assertThrows(
+                () => channel.postMessage('foobar'),
+                Error,
+                'closed'
+            );
+        });
     });
     describe('.onmessage', () => {
         it('should recieve the message on own', async () => {
@@ -58,6 +68,32 @@ describe('integration.test.js', () => {
             });
             await AsyncTestUtil.wait(100);
             assert.equal(emitted.length, 0);
+
+            channel.close();
+            otherChannel.close();
+        });
+        it('should not read messages created before the channel was created', async () => {
+            const channelName = AsyncTestUtil.randomString(12);
+            const channel = new BroadcastChannel(channelName);
+
+            const msgJson = {
+                foo: 'bar'
+            };
+
+            await channel.postMessage(msgJson);
+            await AsyncTestUtil.wait(50);
+
+            const otherChannel = new BroadcastChannel(channelName);
+            const emittedOther = [];
+            otherChannel.onmessage = msg => emittedOther.push(msg);
+
+            await channel.postMessage(msgJson);
+            await channel.postMessage(msgJson);
+
+            await AsyncTestUtil.waitUntil(() => emittedOther.length >= 2);
+            await AsyncTestUtil.wait(100);
+
+            assert.equal(emittedOther.length, 2);
 
             channel.close();
             otherChannel.close();
