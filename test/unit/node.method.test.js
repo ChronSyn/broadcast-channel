@@ -6,7 +6,7 @@ describe('unit/node.method.test.js', () => {
     /**
      * do not run in browser-tests
      */
-    if(!isNode) return;
+    if (!isNode) return;
     const NodeMethod = require('../../dist/lib/methods/node.js');
 
     it('init', () => {
@@ -240,24 +240,6 @@ describe('unit/node.method.test.js', () => {
             });
         });
         describe('.onMessage()', () => {
-            it('should emit the message on self', async () => {
-                const channelName = AsyncTestUtil.randomString(12);
-                const channelStateOwn = await NodeMethod.create(channelName);
-
-                const msgJson = {
-                    foo: 'bar'
-                };
-
-                const emitted = [];
-                NodeMethod.onMessage(channelStateOwn, msg => emitted.push(msg));
-
-                NodeMethod.postMessage(channelStateOwn, msgJson);
-
-                await AsyncTestUtil.waitUntil(() => emitted.length === 1);
-                assert.deepEqual(emitted[0], msgJson);
-
-                await NodeMethod.close(channelStateOwn);
-            });
             it('should emit the message on other', async () => {
                 const channelName = AsyncTestUtil.randomString(12);
                 const channelStateOther = await NodeMethod.create(channelName);
@@ -274,12 +256,7 @@ describe('unit/node.method.test.js', () => {
 
                 await NodeMethod.postMessage(channelStateOwn, msgJson);
 
-
-
-                await AsyncTestUtil.waitUntil(() => emittedOwn.length === 1);
                 await AsyncTestUtil.waitUntil(() => emittedOther.length === 1);
-
-                assert.deepEqual(emittedOwn[0], msgJson);
                 assert.deepEqual(emittedOther[0], msgJson);
 
                 await NodeMethod.close(channelStateOther);
@@ -288,9 +265,10 @@ describe('unit/node.method.test.js', () => {
             it('should have sorted the messages by time', async () => {
                 const channelName = AsyncTestUtil.randomString(12);
                 const channelStateOwn = await NodeMethod.create(channelName);
+                const channelStateOther = await NodeMethod.create(channelName);
 
                 const emitted = [];
-                NodeMethod.onMessage(channelStateOwn, msg => emitted.push(msg));
+                NodeMethod.onMessage(channelStateOther, msg => emitted.push(msg));
 
                 NodeMethod.postMessage(channelStateOwn, {
                     foo: 0
@@ -305,6 +283,7 @@ describe('unit/node.method.test.js', () => {
                 assert.equal(emitted[1].foo, 1);
 
                 await NodeMethod.close(channelStateOwn);
+                await NodeMethod.close(channelStateOther);
             });
         });
     });
@@ -339,7 +318,7 @@ describe('unit/node.method.test.js', () => {
 
             // ensure only the last 100 messages are here
             const messages = await NodeMethod.getAllMessages(channelName);
-            assert.equal(messages.length, 100);
+            assert.ok(messages.length <= 100);
 
 
             await NodeMethod.close(channelStateOther);
@@ -390,10 +369,12 @@ describe('unit/node.method.test.js', () => {
                 })
             );
 
+            const senderState = await NodeMethod.create(channelName);
+
             // send 100 messages
             await Promise.all(
                 new Array(100).fill(0)
-                .map(() => NodeMethod.postMessage(readers[5].channelState, {
+                .map(() => NodeMethod.postMessage(senderState, {
                     foo: 'bar'
                 }))
             );
@@ -411,6 +392,7 @@ describe('unit/node.method.test.js', () => {
             await Promise.all(
                 readers.map(reader => NodeMethod.close(reader.channelState))
             );
+            NodeMethod.close(senderState);
         });
     });
 });

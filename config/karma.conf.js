@@ -8,6 +8,7 @@ const configuration = {
     files: [
         '../test/index.test.js'
     ],
+    // reporters: ['progress'],
     port: 9876,
     colors: true,
     autoWatch: false,
@@ -25,9 +26,14 @@ const configuration = {
             const browsers = availableBrowser
                 .filter(b => !['PhantomJS', 'FirefoxAurora', 'FirefoxNightly'].includes(b))
                 .map(b => {
-                    if (b === 'Chrome') return 'ChromeNoSandbox';
+                    if (b === 'aaChrome') return 'ChromeNoSandbox';
                     else return b;
                 });
+            if (browsers.length > 1) {
+                console.log('!!!!!');
+
+                return ['ChromeNoSandbox'];
+            }
             return browsers;
         }
     },
@@ -52,18 +58,19 @@ const configuration = {
 
     client: {
         mocha: {
-            bail: true,
+            bail: false,
             timeout: 6000
-        }
+        },
+        captureConsole: true
     },
-    browsers: ['ChromeNoSandbox'],
+    //    browsers: ['ChromeNoSandbox'],
     browserDisconnectTimeout: 8000,
     processKillTimeout: 8000,
     customLaunchers: {
-        ChromeNoSandbox: {
-            base: 'Chrome',
-            flags: ['--no-sandbox']
-        }
+        /*        ChromeNoSandbox: {
+                    base: 'Chrome',
+                    flags: ['--no-sandbox']
+                }*/
     },
     singleRun: true
 };

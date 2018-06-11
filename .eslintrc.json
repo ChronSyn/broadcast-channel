@@ -30,7 +30,6 @@
         ],
         "no-console": "off",
         "no-unused-vars": "error",
-        "curly": ["error", "multi-or-nest"],
         "no-var": "error",
         "no-throw-literal": "error"
     }

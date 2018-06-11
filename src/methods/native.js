@@ -1,42 +1,39 @@
-const NativeMethod = {
-    get type() {
-        return 'native';
-    },
-    async create(name) {
-        const bc = new window2.BroadcastChannel(name);
-        return {
-            bc
-        };
-    },
-    async postMessage(
-        instance,
-        msg
-    ) {
-        instance.bc.postMessage(msg);
-    },
-    async close(
-        instance
-    ) {
-        instance.bc.close();
-    },
-    onmessage(
-        instance,
-        fn
-    ) {
-        instance.bc.onmessage = fn;
-    },
-    onmessageerror(
-        instance,
-        fn
-    ) {
-        instance.bc.onmessage = fn;
-    },
-    canBeUsed() {
-        if (typeof window !== 'undefined' && window['BroadcastChannel'])
-            return true;
-        else
-            return false;
-    }
+import isNode from 'detect-node';
+
+
+export const type = 'native';
+
+export async function create(channelName, options = {}) {
+    const state = {
+        channelName,
+        options,
+        bc: new window.BroadcastChannel(channelName),
+        subscriberFunctions: []
+    };
+
+    state.bc.onmessage = msg => {
+        state.subscriberFunctions.forEach(fn => fn(msg.data));
+    };
+
+    return state;
 };
 
-export default NativeMethod;
+export function close(channelState) {
+    channelState.bc.close();
+    channelState.subscriberFunctions = [];
+}
+
+export async function postMessage(channelState, messageJson) {
+    channelState.bc.postMessage(messageJson);
+}
+
+export function onMessage(channelState, fn) {
+    channelState.subscriberFunctions.push(fn);
+}
+
+export function canBeUsed() {
+    if (isNode) return false;
+
+    if (typeof window !== 'undefined' && typeof window.BroadcastChannel === 'function')
+        return true;
+};

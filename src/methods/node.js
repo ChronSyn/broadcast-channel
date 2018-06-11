@@ -257,7 +257,8 @@ export async function create(channelName, options = {}) {
         await readQueue.wrapCall(
             async () => {
                 const messages = await getAllMessages(channelName);
-                const nonEmitted = messages.filter(msgObj => !emittedMessagesIds.has(msgObj.token));
+                const notOwn = messages.filter(msgObj => msgObj.senderUuid !== uuid);
+                const nonEmitted = notOwn.filter(msgObj => !emittedMessagesIds.has(msgObj.token));
                 const notTooOld = nonEmitted.filter(msgObj => msgObj.time > startTime);
                 const timeSorted = notTooOld.sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time);
 

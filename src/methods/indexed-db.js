@@ -19,6 +19,9 @@ const OBJECT_STORE_ID = 'messages';
  */
 const MESSAGE_TTL = 1000 * 60 * 2; // 2 minutes
 
+
+export const type = 'idb';
+
 export function getIdb() {
     const IndexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
     const IDBTransaction = window.IDBTransaction || window.webkitIDBTransaction || window.msIDBTransaction;
@@ -40,7 +43,6 @@ export async function createDatabase(channelName) {
     const openRequest = IndexedDB.open(dbName, 1);
 
     openRequest.onupgradeneeded = ev => {
-        // console.log('onupgrade!!');
         const db = ev.target.result;
         db.createObjectStore(OBJECT_STORE_ID, {
             keyPath: 'token' // primary
@@ -49,7 +51,6 @@ export async function createDatabase(channelName) {
     const db = await new Promise((res, rej) => {
         openRequest.onerror = ev => rej(ev);
         openRequest.onsuccess = () => {
-            // console.log('onsuccess');
             res(openRequest.result);
         };
     });
@@ -178,7 +179,8 @@ export async function create(channelName, options = {}) {
             await readQueue.wrapCall(
                 async () => {
                     const messages = await getAllMessages(db);
-                    const nonEmitted = messages.filter(msgObj => !emittedMessagesIds.has(msgObj.token));
+                    const notOwn = messages.filter(msgObj => msgObj.uuid !== uuid);
+                    const nonEmitted = notOwn.filter(msgObj => !emittedMessagesIds.has(msgObj.token));
                     const notTooOld = nonEmitted.filter(msgObj => msgObj.time > startTime);
                     const timeSorted = notTooOld.sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time);
 
@@ -190,9 +192,10 @@ export async function create(channelName, options = {}) {
                         subscriberFunctions.forEach(fn => fn(msgObj.data));
                     }
 
-                    const r = randomInt(0, Object.keys(otherReaderClients).length * 5);
-                    if (r === 0)
+                    const r = randomInt(0, 5);
+                    if (r === 0) {
                         await cleanOldMessages(db, messages, options.idb.ttl);
+                    }
                 }
             );
         }
@@ -236,8 +239,9 @@ export function onMessage(channelState, fn) {
 }
 
 export function canBeUsed() {
-    if (!isNode) return false;
+    if (isNode) return false;
     const idb = getIdb();
+
     if (!idb.IndexedDB) return false;
     return true;
 };

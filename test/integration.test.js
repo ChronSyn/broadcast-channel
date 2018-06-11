@@ -1,112 +1,144 @@
 const AsyncTestUtil = require('async-test-util');
 const assert = require('assert');
+const isNode = require('detect-node');
 const BroadcastChannel = require('../');
 
-describe('integration.test.js', () => {
-    describe('.constructor()', () => {
-        it('should create a channel', async () => {
-            const channelName = AsyncTestUtil.randomString(12);
-            const channel = new BroadcastChannel(channelName);
-            channel.close();
-        });
-    });
-    describe('.postMessage()', () => {
-        it('should post a message', async () => {
-            const channelName = AsyncTestUtil.randomString(12);
-            const channel = new BroadcastChannel(channelName);
-            await channel.postMessage('foobar');
-            channel.close();
-        });
-        it('should throw if channel is already closed', async () => {
-            const channelName = AsyncTestUtil.randomString(12);
-            const channel = new BroadcastChannel(channelName);
-            channel.close();
-            await AsyncTestUtil.assertThrows(
-                () => channel.postMessage('foobar'),
-                Error,
-                'closed'
-            );
-        });
-    });
-    describe('.onmessage', () => {
-        it('should recieve the message on own', async () => {
-            const channelName = AsyncTestUtil.randomString(12);
-            const channel = new BroadcastChannel(channelName);
+/**
+ * we run this test once per method
+ */
+function runTest(channelType) {
+    const channelOptions = {
+        type: channelType
+    };
 
-            const emitted = [];
-            channel.onmessage = msg => emitted.push(msg);
-            await channel.postMessage({
-                foo: 'bar'
+    describe('integration.test.js', () => {
+        describe('.constructor()', () => {
+            it('asdf', () => {
+                console.log('Started: ' + channelType);
             });
-            await AsyncTestUtil.waitUntil(() => emitted.length === 1);
-            assert.equal(emitted[0].foo, 'bar');
-            channel.close();
-        });
-        it('should recieve the message on other channel', async () => {
-            const channelName = AsyncTestUtil.randomString(12);
-            const channel = new BroadcastChannel(channelName);
-            const otherChannel = new BroadcastChannel(channelName);
-
-            const emitted = [];
-            otherChannel.onmessage = msg => emitted.push(msg);
-            await channel.postMessage({
-                foo: 'bar'
+            it('should create a channel', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channel = new BroadcastChannel(channelName, channelOptions);
+                channel.close();
             });
-            await AsyncTestUtil.waitUntil(() => emitted.length === 1);
-            assert.equal(emitted[0].foo, 'bar');
-            channel.close();
-            otherChannel.close();
         });
-        it('should not confuse messages between different channels', async () => {
-            const channel = new BroadcastChannel(AsyncTestUtil.randomString(12));
-            const otherChannel = new BroadcastChannel(AsyncTestUtil.randomString(12));
-
-            const emitted = [];
-            otherChannel.onmessage = msg => emitted.push(msg);
-            await channel.postMessage({
-                foo: 'bar'
+        describe('.postMessage()', () => {
+            it('should post a message', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channel = new BroadcastChannel(channelName, channelOptions);
+                await channel.postMessage('foobar');
+                channel.close();
             });
-            await AsyncTestUtil.wait(100);
-            assert.equal(emitted.length, 0);
-
-            channel.close();
-            otherChannel.close();
+            it('should throw if channel is already closed', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channel = new BroadcastChannel(channelName, channelOptions);
+                channel.close();
+                await AsyncTestUtil.assertThrows(
+                    () => channel.postMessage('foobar'),
+                    Error,
+                    'closed'
+                );
+            });
         });
-        it('should not read messages created before the channel was created', async () => {
-            const channelName = AsyncTestUtil.randomString(12);
-            const channel = new BroadcastChannel(channelName);
+        describe('.onmessage', () => {
+            /**
+             * the window.BroadcastChannel
+             * does not emit postMessage to own subscribers,
+             * if you want to do that, you have to create another channel
+             */
+            it('should NOT recieve the message on own', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channel = new BroadcastChannel(channelName, channelOptions);
 
-            const msgJson = {
-                foo: 'bar'
-            };
+                const emitted = [];
+                channel.onmessage = msg => emitted.push(msg);
+                await channel.postMessage({
+                    foo: 'bar'
+                });
 
-            await channel.postMessage(msgJson);
-            await AsyncTestUtil.wait(50);
+                await AsyncTestUtil.wait(100);
+                assert.equal(emitted.length, 0);
 
-            const otherChannel = new BroadcastChannel(channelName);
-            const emittedOther = [];
-            otherChannel.onmessage = msg => emittedOther.push(msg);
+                channel.close();
+            });
+            it('should recieve the message on other channel', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channel = new BroadcastChannel(channelName, channelOptions);
+                const otherChannel = new BroadcastChannel(channelName, channelOptions);
 
-            await channel.postMessage(msgJson);
-            await channel.postMessage(msgJson);
+                const emitted = [];
+                otherChannel.onmessage = msg => emitted.push(msg);
+                await channel.postMessage({
+                    foo: 'bar'
+                });
+                await AsyncTestUtil.waitUntil(() => emitted.length === 1);
+                assert.equal(emitted[0].foo, 'bar');
+                channel.close();
+                otherChannel.close();
+            });
+            it('should not confuse messages between different channels', async () => {
+                const channel = new BroadcastChannel(AsyncTestUtil.randomString(12), channelOptions);
+                const otherChannel = new BroadcastChannel(AsyncTestUtil.randomString(12), channelOptions);
 
-            await AsyncTestUtil.waitUntil(() => emittedOther.length >= 2);
-            await AsyncTestUtil.wait(100);
+                const emitted = [];
+                otherChannel.onmessage = msg => emitted.push(msg);
+                await channel.postMessage({
+                    foo: 'bar'
+                });
+                await AsyncTestUtil.wait(100);
+                assert.equal(emitted.length, 0);
 
-            assert.equal(emittedOther.length, 2);
+                channel.close();
+                otherChannel.close();
+            });
+            it('should not read messages created before the channel was created', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channel = new BroadcastChannel(channelName, channelOptions);
 
-            channel.close();
-            otherChannel.close();
+                const msgJson = {
+                    foo: 'bar'
+                };
+
+                await channel.postMessage(msgJson);
+                await AsyncTestUtil.wait(50);
+
+                const otherChannel = new BroadcastChannel(channelName, channelOptions);
+                const emittedOther = [];
+                otherChannel.onmessage = msg => emittedOther.push(msg);
+
+                await channel.postMessage(msgJson);
+                await channel.postMessage(msgJson);
+
+                await AsyncTestUtil.waitUntil(() => emittedOther.length >= 2);
+                await AsyncTestUtil.wait(100);
+
+                assert.equal(emittedOther.length, 2);
+
+                channel.close();
+                otherChannel.close();
+            });
+        });
+        describe('.type', () => {
+            it('should get a type', async () => {
+                const channel = new BroadcastChannel(AsyncTestUtil.randomString(12), channelOptions);
+                const type = channel.type;
+                assert.equal(typeof type, 'string');
+                assert.notEqual(type, '');
+
+                channel.close();
+            });
+        });
+        describe('other', () => {
+            it('', () => {
+                console.log('Finiished: ' + channelType);
+            });
         });
     });
-    describe('.type', () => {
-        it('should get a type', async () => {
-            const channel = new BroadcastChannel(AsyncTestUtil.randomString(12));
-            const type = channel.type;
-            assert.equal(typeof type, 'string');
-            assert.notEqual(type, '');
+};
 
-            channel.close();
-        });
-    });
-});
+if (isNode) {
+    runTest('node');
+} else {
+    runTest('idb');
+    runTest('native');
+}

@@ -1,10 +1,12 @@
 import isNode from 'detect-node';
 
 import * as IndexeDbMethod from './methods/indexed-db';
+import * as NativeMethod from './methods/native';
 
 // order is important
 let METHODS = [
-    IndexeDbMethod
+    IndexeDbMethod,
+    NativeMethod
 ];
 
 /**
@@ -21,7 +23,12 @@ class BroadcastChannel {
     constructor(name, options) {
         this.name = name;
         this.options = options;
-        this.method = getFirstUseableMethod();
+
+        if (options.type) {
+            this.method = METHODS.find(m => m.type === options.type);
+        } else {
+            this.method = getFirstUseableMethod();
+        }
 
         this._preparePromise = this._prepare();
     }
@@ -52,6 +59,7 @@ class BroadcastChannel {
     }
     async close() {
         this.closed = true;
+        await this._preparePromise;
         await this.method.close(
             this.methodInstance
         );
