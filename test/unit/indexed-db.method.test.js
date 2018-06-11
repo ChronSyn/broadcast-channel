@@ -166,8 +166,7 @@ describe('unit/indexed-db.method.test.js', () => {
                     foo: 'bar'
                 };
 
-                IndexedDbMethod.onMessage(channelStateOther, msg => emittedOther.push(msg));
-
+                IndexedDbMethod.onMessage(channelStateOther, msg => emittedOther.push(msg), new Date().getTime());
                 await IndexedDbMethod.postMessage(channelStateOwn, msgJson);
 
                 await AsyncTestUtil.waitUntil(() => emittedOther.length === 1);

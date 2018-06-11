@@ -149,17 +149,11 @@ export function removeStorageEventListener(listener) {
 }
 
 export async function create(channelName, options = {}) {
-    const startTime = new Date().getTime();
     const uuid = randomToken(10);
 
     // set defaults
     if (!options.idb) options.idb = {};
     if (!options.idb.ttl) options.idb.ttl = MESSAGE_TTL;
-
-    // contains all messages that have been emitted before
-    const emittedMessagesIds = new Set();
-
-    const subscriberFunctions = [];
 
     // ensures we do not read messages in parrallel
     const readQueue = new IdleQueue(1);
@@ -167,55 +161,65 @@ export async function create(channelName, options = {}) {
 
     const db = await createDatabase(channelName);
 
-    const listener = addStorageEventListener(
-        channelName,
-        async () => {
-            /**
-             * if we have 2 or more read-tasks in the queue,
-             * we do not have to set more
-             */
-            if (readQueue._idleCalls.size > 1) return;
-            await readQueue.requestIdlePromise();
-            await readQueue.wrapCall(
-                async () => {
-                    const messages = await getAllMessages(db);
-                    const notOwn = messages.filter(msgObj => msgObj.uuid !== uuid);
-                    const nonEmitted = notOwn.filter(msgObj => !emittedMessagesIds.has(msgObj.token));
-                    const notTooOld = nonEmitted.filter(msgObj => msgObj.time > startTime);
-                    const timeSorted = notTooOld.sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time);
-
-                    for (const msgObj of timeSorted) {
-                        emittedMessagesIds.add(msgObj.token);
-                        setTimeout(() => emittedMessagesIds.delete(msgObj.token), options.idb.ttl * 2);
-
-                        // emit to all listeners
-                        subscriberFunctions.forEach(fn => fn(msgObj.data));
-                    }
-
-                    const r = randomInt(0, 5);
-                    if (r === 0) {
-                        await cleanOldMessages(db, messages, options.idb.ttl);
-                    }
-                }
-            );
-        }
-    );
-
-
     const state = {
-        startTime,
         channelName,
         options,
         uuid,
-        emittedMessagesIds,
-        subscriberFunctions,
+        // contains all messages that have been emitted before
+        emittedMessagesIds: new Set(),
+        messagesCallback: null,
         readQueue,
         writeQueue,
-        db,
-        listener
+        db
     };
 
+    state.listener = addStorageEventListener(
+        channelName,
+        () => handleMessagePing(state)
+    );
+
     return state;
+}
+
+/**
+ * when the storage-event pings, so that we now new messages came,
+ * run this
+ */
+export async function handleMessagePing(state) {
+    /**
+     * if we have 2 or more read-tasks in the queue,
+     * we do not have to set more
+     */
+    if (state.readQueue._idleCalls.size > 1) return;
+
+    /**
+     * when there are no listener, we do nothing
+     */
+    if (!state.messagesCallback) return;
+
+    await state.readQueue.requestIdlePromise();
+    await state.readQueue.wrapCall(
+        async () => {
+            const messages = await getAllMessages(state.db);
+            const useMessages = messages
+                .filter(msgObj => msgObj.uuid !== state.uuid) // not send by own
+                .filter(msgObj => !state.emittedMessagesIds.has(msgObj.token)) // not already emitted
+                .filter(msgObj => msgObj.time >= state.messagesCallbackTime) // not older then onMessageCallback
+                .sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time); // sort by time
+
+            for (const msgObj of useMessages) {
+                if (state.messagesCallback) {
+                    state.emittedMessagesIds.add(msgObj.token);
+                    setTimeout(
+                        () => state.emittedMessagesIds.delete(msgObj.token),
+                        state.options.idb.ttl * 2
+                    );
+
+                    state.messagesCallback(msgObj.data);
+                }
+            }
+        }
+    );
 }
 
 export function close(channelState) {
@@ -232,10 +236,21 @@ export async function postMessage(channelState, messageJson) {
         messageJson
     );
     pingOthers(channelState.channelName);
+
+    if (randomInt(0, 5) === 0) {
+        const messages = await getAllMessages(channelState.db);
+        await cleanOldMessages(
+            channelState.db,
+            messages,
+            channelState.options.idb.ttl
+        );
+    }
 }
 
-export function onMessage(channelState, fn) {
-    channelState.subscriberFunctions.push(fn);
+export function onMessage(channelState, fn, time) {
+    channelState.messagesCallbackTime = time;
+    channelState.messagesCallback = fn;
+    handleMessagePing(channelState);
 }
 
 export function canBeUsed() {

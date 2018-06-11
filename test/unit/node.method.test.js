@@ -17,7 +17,7 @@ describe('unit/node.method.test.js', () => {
             const channelName = AsyncTestUtil.randomString(12);
             const paths = NodeMethod.getPaths(channelName);
             assert.ok(paths.messages);
-            assert.ok(paths.messages.includes(channelName));
+            assert.ok(!paths.messages.includes(channelName));
         });
     });
     describe('.ensureFoldersExist()', () => {
@@ -251,13 +251,14 @@ describe('unit/node.method.test.js', () => {
                     foo: 'bar'
                 };
 
-                NodeMethod.onMessage(channelStateOther, msg => emittedOther.push(msg));
-                NodeMethod.onMessage(channelStateOwn, msg => emittedOwn.push(msg));
+                NodeMethod.onMessage(channelStateOther, msg => emittedOther.push(msg), new Date().getTime());
+                NodeMethod.onMessage(channelStateOwn, msg => emittedOwn.push(msg), new Date().getTime());
 
                 await NodeMethod.postMessage(channelStateOwn, msgJson);
 
                 await AsyncTestUtil.waitUntil(() => emittedOther.length === 1);
                 assert.deepEqual(emittedOther[0], msgJson);
+                assert.equal(emittedOwn.length, 0);
 
                 await NodeMethod.close(channelStateOther);
                 await NodeMethod.close(channelStateOwn);
@@ -268,7 +269,7 @@ describe('unit/node.method.test.js', () => {
                 const channelStateOther = await NodeMethod.create(channelName);
 
                 const emitted = [];
-                NodeMethod.onMessage(channelStateOther, msg => emitted.push(msg));
+                NodeMethod.onMessage(channelStateOther, msg => emitted.push(msg), new Date().getTime());
 
                 NodeMethod.postMessage(channelStateOwn, {
                     foo: 0
@@ -341,7 +342,7 @@ describe('unit/node.method.test.js', () => {
 
             const emittedOther = [];
             const channelStateOther = await NodeMethod.create(channelName, channelOptions);
-            NodeMethod.onMessage(channelStateOther, msg => emittedOther.push(msg));
+            NodeMethod.onMessage(channelStateOther, msg => emittedOther.push(msg), new Date().getTime());
 
             await NodeMethod.postMessage(channelStateOwn, msgJson);
             await NodeMethod.postMessage(channelStateOwn, msgJson);
@@ -361,7 +362,7 @@ describe('unit/node.method.test.js', () => {
                 .map(async () => {
                     const channelState = await NodeMethod.create(channelName);
                     const emitted = [];
-                    NodeMethod.onMessage(channelState, msg => emitted.push(msg));
+                    NodeMethod.onMessage(channelState, msg => emitted.push(msg), new Date().getTime());
                     return {
                         channelState,
                         emitted

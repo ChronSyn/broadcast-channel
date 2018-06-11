@@ -3,16 +3,19 @@ import isNode from 'detect-node';
 
 export const type = 'native';
 
-export async function create(channelName, options = {}) {
+export function create(channelName, options = {}) {
     const state = {
         channelName,
         options,
+        messagesCallback: null,
         bc: new window.BroadcastChannel(channelName),
         subscriberFunctions: []
     };
 
     state.bc.onmessage = msg => {
-        state.subscriberFunctions.forEach(fn => fn(msg.data));
+        if (state.messagesCallback) {
+            state.messagesCallback(msg.data);
+        }
     };
 
     return state;
@@ -23,12 +26,13 @@ export function close(channelState) {
     channelState.subscriberFunctions = [];
 }
 
-export async function postMessage(channelState, messageJson) {
-    channelState.bc.postMessage(messageJson);
+export function postMessage(channelState, messageJson) {
+    channelState.bc.postMessage(messageJson, false);
 }
 
-export function onMessage(channelState, fn) {
-    channelState.subscriberFunctions.push(fn);
+export function onMessage(channelState, fn, time) {
+    channelState.messagesCallbackTime = time;
+    channelState.messagesCallback = fn;
 }
 
 export function canBeUsed() {

@@ -1,5 +1,9 @@
 import isNode from 'detect-node';
 
+import {
+    isPromise
+} from './util';
+
 import * as IndexeDbMethod from './methods/indexed-db';
 import * as NativeMethod from './methods/native';
 
@@ -20,7 +24,7 @@ if (isNode) {
 
 
 class BroadcastChannel {
-    constructor(name, options) {
+    constructor(name, options = {}) {
         this.name = name;
         this.options = options;
 
@@ -30,44 +34,80 @@ class BroadcastChannel {
             this.method = getFirstUseableMethod();
         }
 
-        this._preparePromise = this._prepare();
+        this._preparePromise = null;
+        this._prepare();
     }
-    async _prepare() {
-        if (this._preparePromise) return this._preparePromise;
-        this.methodInstance = await this.method.create(this.name, this.options);
+    _prepare() {
+        const maybePromise = this.method.create(this.name, this.options);
+        if (isPromise(maybePromise)) {
+            this._preparePromise = maybePromise;
+            maybePromise.then(async (s) => {
+                // used in tests to simulate slow runtime
+                if (this.options.prepareDelay) {
+                    // await new Promise(res => setTimeout(res, this.options.prepareDelay));
+                }
+                this._state = s;
+            });
+        } else {
+            this._state = maybePromise;
+        }
     }
     async postMessage(msg) {
+        const msgObj = {
+            time: new Date().getTime(),
+            data: msg
+        };
+
         if (this.closed) {
             throw new Error(
                 'BroadcastChannel.postMessage(): ' +
                 'Cannot post message after channel has closed'
             );
         }
-        await this._preparePromise;
-        await this.method.postMessage(
-            this.methodInstance,
-            msg
+        if (this._preparePromise) await this._preparePromise;
+        return this.method.postMessage(
+            this._state,
+            msgObj
         );
     }
     set onmessage(fn) {
-        this._preparePromise.then(() => {
+        const time = new Date().getTime();
+        if (this._preparePromise) {
+            this._preparePromise.then(() => {
+                this.method.onMessage(
+                    this._state,
+                    messageHandler(fn, time),
+                    time
+                );
+            });
+        } else {
             this.method.onMessage(
-                this.methodInstance,
-                fn
+                this._state,
+                messageHandler(fn, time),
+                time
             );
-        });
+        }
     }
     async close() {
         this.closed = true;
-        await this._preparePromise;
+        if (this._preparePromise) await this._preparePromise;
         await this.method.close(
-            this.methodInstance
+            this._state
         );
     }
     get type() {
         return this.method.type;
     }
 };
+
+function messageHandler(fn, minTime) {
+    return msgObj => {
+        if (msgObj.time >= minTime) {
+            fn(msgObj.data);
+        }
+    };
+}
+
 
 function getFirstUseableMethod() {
     const useMethod = METHODS.find(method => method.canBeUsed());

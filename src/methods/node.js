@@ -9,6 +9,9 @@ import * as os from 'os';
 import * as events from 'events';
 import * as net from 'net';
 import * as path from 'path';
+import {
+    sha3_224
+} from 'js-sha3';
 
 import isNode from 'detect-node';
 import randomToken from 'random-token';
@@ -39,7 +42,7 @@ export function getPaths(channelName) {
     const channelPathBase = path.join(
         os.tmpdir(),
         TMP_FOLDER_NAME,
-        channelName
+        sha3_224(channelName) // use hash incase of strange characters
     );
     const folderPathReaders = path.join(
         channelPathBase,
@@ -207,17 +210,12 @@ export async function cleanOldMessages(messageObjects, ttl = MESSAGE_TTL) {
 export const type = 'node';
 
 export async function create(channelName, options = {}) {
-
-    const startTime = new Date().getTime();
-
     // set defaults
     if (!options.node) options.node = {};
     if (!options.node.ttl) options.node.ttl = MESSAGE_TTL;
 
     await ensureFoldersExist(channelName);
-
     const uuid = randomToken(10);
-    const messagesEE = new events.EventEmitter();
 
     const [
         otherReaderUuids,
@@ -237,58 +235,19 @@ export async function create(channelName, options = {}) {
         })
     );
 
-    // contains all messages that have been emitted before
-    const emittedMessagesIds = new Set();
-
     // ensures we do not read messages in parrallel
     const readQueue = new IdleQueue(1);
     const writeQueue = new IdleQueue(1);
-
-    // when new message comes in, we read it and emit it
-    socketEE.emitter.on('data', async () => {
-
-        /**
-         * if we have 2 or more read-tasks in the queue,
-         * we do not have to set more
-         */
-        if (readQueue._idleCalls.size > 1) return;
-
-        await readQueue.requestIdlePromise();
-        await readQueue.wrapCall(
-            async () => {
-                const messages = await getAllMessages(channelName);
-                const notOwn = messages.filter(msgObj => msgObj.senderUuid !== uuid);
-                const nonEmitted = notOwn.filter(msgObj => !emittedMessagesIds.has(msgObj.token));
-                const notTooOld = nonEmitted.filter(msgObj => msgObj.time > startTime);
-                const timeSorted = notTooOld.sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time);
-
-                for (const msgObj of timeSorted) {
-                    const content = await readMessage(msgObj);
-                    emittedMessagesIds.add(msgObj.token);
-                    setTimeout(() => emittedMessagesIds.delete(msgObj.token), options.node.ttl * 2);
-
-                    messagesEE.emit('message', content.data);
-                }
-
-                /**
-                 * to not waste resources on cleaning up,
-                 * only if random-int matches, we clean up old messages
-                 */
-                const r = randomInt(0, Object.keys(otherReaderClients).length * 5);
-                if (r === 0)
-                    await cleanOldMessages(messages, options.node.ttl);
-            }
-        );
-    });
-
 
     const state = {
         channelName,
         options,
         uuid,
-        startTime,
         socketEE,
-        messagesEE,
+        // contains all messages that have been emitted before
+        emittedMessagesIds: new Set(),
+        messagesCallbackTime: null,
+        messagesCallback: null,
         readQueue,
         writeQueue,
         otherReaderUuids,
@@ -297,9 +256,56 @@ export async function create(channelName, options = {}) {
         removeUnload: unload.add(() => close(state))
     };
 
+    // when new message comes in, we read it and emit it
+    socketEE.emitter.on('data', () => handleMessagePing(state));
+
     return state;
 }
 
+
+/**
+ * when the socket pings, so that we now new messages came,
+ * run this
+ */
+export async function handleMessagePing(state) {
+    /**
+     * if we have 2 or more read-tasks in the queue,
+     * we do not have to set more
+     */
+    if (state.readQueue._idleCalls.size > 1) return;
+
+    /**
+     * when there are no listener, we do nothing
+     */
+    if (!state.messagesCallback) return;
+
+    await state.readQueue.requestIdlePromise();
+    await state.readQueue.wrapCall(
+        async () => {
+            const messages = await getAllMessages(state.channelName);
+            const useMessages = messages
+                .filter(msgObj => msgObj.senderUuid !== state.uuid) // not send by own
+                .filter(msgObj => !state.emittedMessagesIds.has(msgObj.token)) // not already emitted
+                .filter(msgObj => msgObj.time >= state.messagesCallbackTime) // not older then onMessageCallback
+                .sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time); // sort by time
+
+            if (state.messagesCallback) {
+                for (const msgObj of useMessages) {
+                    const content = await readMessage(msgObj);
+                    state.emittedMessagesIds.add(msgObj.token);
+                    setTimeout(
+                        () => state.emittedMessagesIds.delete(msgObj.token),
+                        state.options.node.ttl * 2
+                    );
+
+                    if (state.messagesCallback) {
+                        state.messagesCallback(content.data);
+                    }
+                }
+            }
+        }
+    );
+}
 
 export async function postMessage(channelState, messageJson) {
 
@@ -340,20 +346,31 @@ export async function postMessage(channelState, messageJson) {
         .map(client => client.write('new'))
     );
 
+    /**
+     * clean up old messages
+     * to not waste resources on cleaning up,
+     * only if random-int matches, we clean up old messages
+     */
+    if (randomInt(0, 10) === 0) {
+        const messages = await getAllMessages(channelState.channelName);
+        await cleanOldMessages(messages, channelState.options.node.ttl);
+    }
+
     // emit to own eventEmitter
     channelState.socketEE.emitter.emit('data', JSON.parse(JSON.stringify(messageJson)));
 }
 
 
-export function onMessage(channelState, fn) {
-    channelState.messagesEE.on('message', msg => fn(msg));
+export function onMessage(channelState, fn, time = new Date().getTime()) {
+    channelState.messagesCallbackTime = time;
+    channelState.messagesCallback = fn;
+    handleMessagePing(channelState);
 }
 
 export function close(channelState) {
     channelState.removeUnload();
     channelState.socketEE.server.close();
     channelState.socketEE.emitter.removeAllListeners();
-    channelState.messagesEE.removeAllListeners();
     channelState.readQueue.clear();
     channelState.writeQueue.clear();
     Object.values(channelState.otherReaderClients)
