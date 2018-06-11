@@ -1,0 +1,30 @@
+<html>
+
+<head>
+    <script src="./broadcast-channel.browserify.js"></script>
+</head>
+
+<body>
+
+    <iframe src="./iframe.html" style="width: 200px; height: 200px;"></iframe>
+</body>
+
+
+<script>
+    const channel = new window.BroadcastChannel2('foobar');
+    channel.onmessage = function(msg) {
+        console.log('got answer');
+        console.dir(msg);
+    };
+    setTimeout(async() => {
+        // send to iframe and await answer
+        console.log('sending message via ' + channel.type);
+        await channel.postMessage({
+            foo: 'bar'
+        });
+        console.log('message send');
+
+    }, 1000);
+</script>
+
+</html>

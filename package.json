@@ -35,7 +35,9 @@
     "clear": "rimraf -rf ./dist && rimraf -rf ./gen",
     "build:es6": "rimraf -rf dist/es && cross-env NODE_ENV=es6 babel src --out-dir dist/es",
     "build:es5": "cross-env NODE_ENV=es5 node node_modules/babel-cli/bin/babel.js src --out-dir dist/lib",
-    "build": "npm run clear && concurrently \"npm run build:es6\" \"npm run build:es5\""
+    "build:browser": "browserify dist/lib/browserify.index.js > dist/broadcast-channel.browserify.js && cp  dist/broadcast-channel.browserify.js ./docs",
+    "build": "npm run clear && concurrently \"npm run build:es6\" \"npm run build:es5\" && npm run build:browser",
+    "docs:serve": "npm run build && http-server ./docs"
   },
   "pre-commit": [
     "lint"
@@ -78,6 +80,7 @@
     "convert-hrtime": "2.0.0",
     "cross-env": "5.1.6",
     "eslint": "4.19.1",
+    "http-server": "^0.11.1",
     "karma": "2.0.2",
     "karma-babel-preprocessor": "7.0.0",
     "karma-browserify": "5.2.0",

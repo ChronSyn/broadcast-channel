@@ -16,7 +16,7 @@ export type BroadcastChannelOptions = {
  * @link https://html.spec.whatwg.org/multipage/web-messaging.html#broadcasting-to-other-browsing-contexts
  */
 declare class BroadcastChannel {
-    constructor(name: string, opts: BroadcastChannelOptions);
+    constructor(name: string, opts?: BroadcastChannelOptions);
     readonly name: string;
     readonly options: BroadcastChannelOptions;
     readonly type: MethodType;
