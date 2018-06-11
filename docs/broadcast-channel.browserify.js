@@ -727,7 +727,13 @@ function getIdb() {
 
 function pingOthers(channelName) {
     var storageKey = DB_PREFIX + channelName;
-    var value = 'new';
+
+    /**
+     * a random token must be set
+     * because chrome will not send the storage-event
+     * if prev- and now-value is equal
+     */
+    var value = (0, _randomToken2['default'])(10);
     localStorage.setItem(storageKey, value);
 
     /**

@@ -4,23 +4,38 @@
     <script src="./broadcast-channel.browserify.js"></script>
 </head>
 
-<body>
+<body id="body">
 
-    <iframe src="./iframe.html" style="width: 200px; height: 200px;"></iframe>
+    <iframe src="./iframe.html" style="width: 200px; height: 200px; background-color: white;"></iframe>
 </body>
 
 
 <script>
-    const channel = new window.BroadcastChannel2('foobar');
+    var body = document.getElementById('body');
+    var channel = new window.BroadcastChannel2('foobar');
+    var messages = [];
     channel.onmessage = function(msg) {
         console.log('got answer');
         console.dir(msg);
+        messages.push(msg);
+
+        if (msg.original.step === 'one') {
+            channel.postMessage({
+                step: 'two'
+            });
+        }
+
+        // check if sucess
+        if (messages.length === 2) {
+            console.log('sucess');
+            body.style.backgroundColor = 'green';
+        }
     };
-    setTimeout(async() => {
+    setTimeout(function() {
         // send to iframe and await answer
         console.log('sending message via ' + channel.type);
-        await channel.postMessage({
-            foo: 'bar'
+        channel.postMessage({
+            step: 'one'
         });
         console.log('message send');
 

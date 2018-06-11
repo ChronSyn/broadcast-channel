@@ -120,7 +120,13 @@ export async function cleanOldMessages(db, messageObjects, ttl = MESSAGE_TTL) {
  */
 export function pingOthers(channelName) {
     const storageKey = DB_PREFIX + channelName;
-    const value = 'new';
+
+    /**
+     * a random token must be set
+     * because chrome will not send the storage-event
+     * if prev- and now-value is equal
+     */
+    const value =  randomToken(10);
     localStorage.setItem(storageKey, value);
 
     /**
