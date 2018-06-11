@@ -8,11 +8,6 @@
 </body>
 
 <script>
-    window.addEventListener('storage', () => {
-        // window.localStorage.setItem('pubkey.broadcast-channel-0-foobar', 'aaa')
-        console.log('iframe recieved storage-event');
-    });
-
     const channel = new window.BroadcastChannel2('foobar');
     channel.onmessage = function(msg) {
         console.log('recieved message');
@@ -20,10 +15,12 @@
         const body = document.getElementById('body');
         body.innerHTML += JSON.stringify(msg) + '</br>';
 
-        channel.postMessage({
-            answer: true,
-            original: msg
-        });
+        if (msg.step === 'one') {
+            channel.postMessage({
+                answer: true,
+                original: msg
+            });
+        }
     };
 </script>
 

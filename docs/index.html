@@ -19,7 +19,7 @@
         console.dir(msg);
         messages.push(msg);
 
-        if (msg.original.step === 'one') {
+        if (msg.original && msg.original.step === 'one') {
             channel.postMessage({
                 step: 'two'
             });
