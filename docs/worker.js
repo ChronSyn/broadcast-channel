@@ -44,10 +44,11 @@ function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj;
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 // order is important
-var METHODS = [IndexeDbMethod, NativeMethod];
+var METHODS = [NativeMethod, // fastest
+IndexeDbMethod];
 
 /**
- * this is loaded lazy
+ * The NodeMethod is loaded lazy
  * so it will not get bundled in browser-builds
  */
 if (_detectNode2['default']) {
@@ -286,6 +287,7 @@ var createDatabase = exports.createDatabase = function () {
                             var db = ev.target.result;
                             db.createObjectStore(OBJECT_STORE_ID, {
                                 keyPath: 'token' // primary
+                                // autoIncrement:true
                             });
                         };
                         _context.next = 6;
@@ -376,7 +378,9 @@ var getAllMessages = exports.getAllMessages = function () {
                                     ret.push(cursor.value);
                                     //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
                                     cursor['continue']();
-                                } else res(ret);
+                                } else {
+                                    res(ret);
+                                }
                             };
                         }));
 
@@ -478,46 +482,47 @@ var create = exports.create = function () {
                             state.listener = addStorageEventListener(channelName, function () {
                                 return handleMessagePing(state);
                             });
-                        } else {
-                            /**
-                             * if localStorage-events can not be used,
-                             * we have to pull new messages via interval
-                             */
-                            (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee5() {
-                                return _regenerator2['default'].wrap(function _callee5$(_context5) {
-                                    while (1) {
-                                        switch (_context5.prev = _context5.next) {
-                                            case 0:
-                                                if (!(state.closed === false)) {
-                                                    _context5.next = 7;
-                                                    break;
-                                                }
-
-                                                _context5.next = 3;
-                                                return handleMessagePing(state);
-
-                                            case 3:
-                                                _context5.next = 5;
-                                                return new _promise2['default'](function (res) {
-                                                    return setTimeout(res, 100);
-                                                });
-
-                                            case 5:
-                                                _context5.next = 0;
-                                                break;
-
-                                            case 7:
-                                            case 'end':
-                                                return _context5.stop();
-                                        }
-                                    }
-                                }, _callee5, _this);
-                            }))();
                         }
+
+                        /**
+                         * if service-workers are used,
+                         * we have no 'storage'-event if they post a message,
+                         * therefore we also have to set an interval
+                         */
+                        (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee5() {
+                            return _regenerator2['default'].wrap(function _callee5$(_context5) {
+                                while (1) {
+                                    switch (_context5.prev = _context5.next) {
+                                        case 0:
+                                            if (!(state.closed === false)) {
+                                                _context5.next = 7;
+                                                break;
+                                            }
+
+                                            _context5.next = 3;
+                                            return handleMessagePing(state);
+
+                                        case 3:
+                                            _context5.next = 5;
+                                            return new _promise2['default'](function (res) {
+                                                return setTimeout(res, state.options.idb.fallbackInterval);
+                                            });
+
+                                        case 5:
+                                            _context5.next = 0;
+                                            break;
+
+                                        case 7:
+                                        case 'end':
+                                            return _context5.stop();
+                                    }
+                                }
+                            }, _callee5, _this);
+                        }))();
 
                         return _context6.abrupt('return', state);
 
-                    case 12:
+                    case 13:
                     case 'end':
                         return _context6.stop();
                 }
@@ -645,6 +650,15 @@ var handleMessagePing = exports.handleMessagePing = function () {
                                             return _context7.finish(16);
 
                                         case 24:
+                                            if (!((0, _randomInt2['default'])(0, 10) === 0)) {
+                                                _context7.next = 27;
+                                                break;
+                                            }
+
+                                            _context7.next = 27;
+                                            return cleanOldMessages(state.db, messages, state.options.idb.ttl);
+
+                                        case 27:
                                         case 'end':
                                             return _context7.stop();
                                     }
@@ -667,7 +681,6 @@ var handleMessagePing = exports.handleMessagePing = function () {
 
 var postMessage = exports.postMessage = function () {
     var _ref9 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee9(channelState, messageJson) {
-        var messages;
         return _regenerator2['default'].wrap(function _callee9$(_context9) {
             while (1) {
                 switch (_context9.prev = _context9.next) {
@@ -678,20 +691,7 @@ var postMessage = exports.postMessage = function () {
                     case 2:
                         pingOthers(channelState);
 
-                        if (!((0, _randomInt2['default'])(0, 10) === 0)) {
-                            _context9.next = 9;
-                            break;
-                        }
-
-                        _context9.next = 6;
-                        return getAllMessages(channelState.db);
-
-                    case 6:
-                        messages = _context9.sent;
-                        _context9.next = 9;
-                        return cleanOldMessages(channelState.db, messages, channelState.options.idb.ttl);
-
-                    case 9:
+                    case 3:
                     case 'end':
                         return _context9.stop();
                 }
@@ -741,11 +741,12 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'd
 
 var DB_PREFIX = 'pubkey.broadcast-channel-0-';
 var OBJECT_STORE_ID = 'messages';
+
 /**
- * after this time the messages gets deleted
+ * after this time the messages get deleted
  * It is assumed that all reader have consumed it by then
  */
-var MESSAGE_TTL = 1000 * 60 * 2; // 2 minutes
+var MESSAGE_TTL = 1000 * 45; // 30 seconds
 
 /**
  * if the 'storage'-even can not be used,
@@ -869,7 +870,7 @@ function create(channelName) {
         channelName: channelName,
         options: options,
         messagesCallback: null,
-        bc: new window.BroadcastChannel(channelName),
+        bc: new BroadcastChannel(channelName),
         subscriberFunctions: []
     };
 
@@ -899,7 +900,7 @@ function onMessage(channelState, fn, time) {
 function canBeUsed() {
     if (_detectNode2['default']) return false;
 
-    if (typeof window !== 'undefined' && typeof window.BroadcastChannel === 'function') return true;
+    if (typeof BroadcastChannel === 'function') return true;
 };
 },{"detect-node":122}],4:[function(require,module,exports){
 'use strict';
@@ -7434,14 +7435,18 @@ function hasOwnProperty(obj, prop) {
  */
 
 
+// overwrite console.log
+const logBefore = console.log;
+console.log = str => logBefore('worker: ' + str);
+
 var BroadcastChannel = require('../../dist/lib/index.js');
 
 var channel = new BroadcastChannel('foobar');
 var messages = [];
 channel.onmessage = function(msg) {
-    console.log('worker: got message (' + msg.step + '): ' + JSON.stringify(msg));
+    console.log('recieved message(' + msg.step + ') from ' + msg.from + ': ' + JSON.stringify(msg));
     if (!msg.answer) {
-        console.log('worker: answer back');
+        console.log('(' + msg.step + ') answer back');
         channel.postMessage({
             answer: true,
             from: 'worker',

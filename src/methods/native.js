@@ -8,7 +8,7 @@ export function create(channelName, options = {}) {
         channelName,
         options,
         messagesCallback: null,
-        bc: new window.BroadcastChannel(channelName),
+        bc: new BroadcastChannel(channelName),
         subscriberFunctions: []
     };
 
@@ -38,6 +38,5 @@ export function onMessage(channelState, fn, time) {
 export function canBeUsed() {
     if (isNode) return false;
 
-    if (typeof window !== 'undefined' && typeof window.BroadcastChannel === 'function')
-        return true;
+    if (typeof BroadcastChannel === 'function') return true;
 };

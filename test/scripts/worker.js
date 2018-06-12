@@ -4,14 +4,18 @@
  */
 
 
+// overwrite console.log
+const logBefore = console.log;
+console.log = str => logBefore('worker: ' + str);
+
 var BroadcastChannel = require('../../dist/lib/index.js');
 
 var channel = new BroadcastChannel('foobar');
 var messages = [];
 channel.onmessage = function(msg) {
-    console.log('worker: got message (' + msg.step + '): ' + JSON.stringify(msg));
+    console.log('recieved message(' + msg.step + ') from ' + msg.from + ': ' + JSON.stringify(msg));
     if (!msg.answer) {
-        console.log('worker: answer back');
+        console.log('(' + msg.step + ') answer back');
         channel.postMessage({
             answer: true,
             from: 'worker',

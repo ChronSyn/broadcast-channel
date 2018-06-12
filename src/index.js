@@ -9,12 +9,12 @@ import * as NativeMethod from './methods/native';
 
 // order is important
 let METHODS = [
-    IndexeDbMethod,
-    NativeMethod
+    NativeMethod, // fastest
+    IndexeDbMethod
 ];
 
 /**
- * this is loaded lazy
+ * The NodeMethod is loaded lazy
  * so it will not get bundled in browser-builds
  */
 if (isNode) {

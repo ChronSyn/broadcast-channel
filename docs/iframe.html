@@ -9,15 +9,20 @@
 </body>
 
 <script>
+    // overwrite console.log
+    const logBefore = console.log;
+    console.log = str => logBefore('iframe: ' + str);
+
     var channel = new window.BroadcastChannel2('foobar');
     var msgContainer = document.getElementById('messages');
     channel.onmessage = function(msg) {
-        console.log('iframe: recieved message(' + msg.step + '): ' + JSON.stringify(msg));
+        console.log('recieved message(' + msg.step + ') from ' + msg.from + ': ' + JSON.stringify(msg));
 
-        msgContainer.innerHTML += JSON.stringify(msg) + '</br>';
+        var textnode = document.createTextNode(JSON.stringify(msg) + '</br>');
+        msgContainer.appendChild(textnode);
 
         if (!msg.answer) {
-            console.log('iframe: answer back');
+            console.log('answer back(' + msg.step + ')');
             channel.postMessage({
                 answer: true,
                 from: 'iframe',

@@ -13,11 +13,12 @@ import IdleQueue from 'custom-idle-queue';
 
 const DB_PREFIX = 'pubkey.broadcast-channel-0-';
 const OBJECT_STORE_ID = 'messages';
+
 /**
- * after this time the messages gets deleted
+ * after this time the messages get deleted
  * It is assumed that all reader have consumed it by then
  */
-const MESSAGE_TTL = 1000 * 60 * 2; // 2 minutes
+const MESSAGE_TTL = 1000 * 45; // 30 seconds
 
 /**
  * if the 'storage'-even can not be used,
@@ -28,10 +29,10 @@ const FALLBACK_INTERVAL = 100;
 export const type = 'idb';
 
 export function getIdb() {
-    if(typeof indexedDB !== 'undefined') return indexedDB;
-    if(typeof mozIndexedDB !== 'undefined') return mozIndexedDB;
-    if(typeof webkitIndexedDB !== 'undefined') return webkitIndexedDB;
-    if(typeof msIndexedDB !== 'undefined') return msIndexedDB;
+    if (typeof indexedDB !== 'undefined') return indexedDB;
+    if (typeof mozIndexedDB !== 'undefined') return mozIndexedDB;
+    if (typeof webkitIndexedDB !== 'undefined') return webkitIndexedDB;
+    if (typeof msIndexedDB !== 'undefined') return msIndexedDB;
 
     return false;
 }
@@ -63,7 +64,8 @@ export async function createDatabase(channelName) {
     openRequest.onupgradeneeded = ev => {
         const db = ev.target.result;
         db.createObjectStore(OBJECT_STORE_ID, {
-            keyPath: 'token' // primary
+            keyPath: 'token', // primary
+            // autoIncrement:true
         });
     };
     const db = await new Promise((res, rej) => {
@@ -109,8 +111,9 @@ export async function getAllMessages(db) {
                 ret.push(cursor.value);
                 //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
                 cursor.continue();
-            } else
+            } else {
                 res(ret);
+            }
         };
     });
 }
@@ -208,18 +211,19 @@ export async function create(channelName, options = {}) {
             channelName,
             () => handleMessagePing(state)
         );
-    } else {
-        /**
-         * if localStorage-events can not be used,
-         * we have to pull new messages via interval
-         */
-        (async () => {
-            while (state.closed === false) {
-                await handleMessagePing(state);
-                await new Promise(res => setTimeout(res, 100));
-            }
-        })();
     }
+
+    /**
+     * if service-workers are used,
+     * we have no 'storage'-event if they post a message,
+     * therefore we also have to set an interval
+     */
+    (async () => {
+        while (state.closed === false) {
+            await handleMessagePing(state);
+            await new Promise(res => setTimeout(res, state.options.idb.fallbackInterval));
+        }
+    })();
 
     return state;
 }
@@ -261,6 +265,14 @@ export async function handleMessagePing(state) {
                     state.messagesCallback(msgObj.data);
                 }
             }
+            if (randomInt(0, 10) === 0) {
+                await cleanOldMessages(
+                    state.db,
+                    messages,
+                    state.options.idb.ttl
+                );
+            }
+
         }
     );
 }
@@ -280,15 +292,6 @@ export async function postMessage(channelState, messageJson) {
         messageJson
     );
     pingOthers(channelState);
-
-    if (randomInt(0, 10) === 0) {
-        const messages = await getAllMessages(channelState.db);
-        await cleanOldMessages(
-            channelState.db,
-            messages,
-            channelState.options.idb.ttl
-        );
-    }
 }
 
 export function onMessage(channelState, fn, time) {

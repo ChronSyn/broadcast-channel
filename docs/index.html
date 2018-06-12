@@ -8,12 +8,13 @@
             width: 400px;
             float: left;
             height: 500px;
+            overflow-y: scroll;
         }
 
         #right {
             float: right;
             background-color: white;
-            width: 400px;
+            width: 300px;
             min-height: 200px;
             padding: 10px;
         }
@@ -26,14 +27,21 @@
 
     <div id="right">
         <h2>BroadcastChannel live test</h2>
+        <h4>(If this screen goes green, everything works)</h4>
+        <p>This will send a message from the main-context, await until the iframe and the web-worker answered, then repeat until all messages have been send.</p>
         <b>User-Agent:</b> <span id="user-agent">unknown</span><br />
+        <b>Method:</b> <span id="method">X</span><br />
         <b>MessageCount:</b> <span id="msg-count">0</span><br />
         <b>Amount Time:</b> <span id="time-amount">X</span><br />
+        <br/>
+        <p>This is kirby, which stucks if the process is blocked</p>
+        <img src="kirby.gif" />
     </div>
 </body>
 
 
 <script>
+    var TEST_MESSAGES = 50;
     var body = document.getElementById('body');
     var msgContainer = document.getElementById('messages');
     var rightContainer = document.getElementById('right');
@@ -43,12 +51,13 @@
 
     var startTime = new Date().getTime();
     var channel = new window.BroadcastChannel2('foobar');
+    document.getElementById('method').innerHTML = channel.type;
 
     /**
      * to measure the speed, we:
      * 1. send message
      * 2. wait until iframe and worker answers
-     * 3. repeat from 1. for 50 times
+     * 3. repeat from 1. for TEST_MESSAGES times
      */
     var messagesSend = 0;
     var answerPool = {};
@@ -56,29 +65,29 @@
         console.log('main: recieved msg' + JSON.stringify(msg));
 
         answerPool[msg.from] = msg;
-        msgContainer.innerHTML += JSON.stringify(msg) + '</br>';
+        var textnode = document.createTextNode(JSON.stringify(msg) + '</br>');
+        msgContainer.appendChild(textnode);
+
         if (answerPool.worker && answerPool.iframe) {
             answerPool = {}; // reset
 
-            if (messagesSend >= 50) {
+            if (messagesSend >= TEST_MESSAGES) {
                 // sucess
                 console.log('main: sucess');
                 body.style.backgroundColor = 'green';
                 const amountTime = new Date().getTime() - startTime;
-                document.getElementById('time-amount').innerHTML = amountTime;
+                document.getElementById('time-amount').innerHTML = amountTime + 'ms';
             } else {
                 // send next message
-                console.log('main: send next message ====================');
-                setTimeout(function() {
-                    messagesSend++;
+                messagesSend++;
+                console.log('main: send next message (' + messagesSend + ') ====================');
                     messageCountContainer.innerHTML = messagesSend;
                     channel.postMessage({
+                        from: 'main',
                         foo: 'bar',
                         step: messagesSend
                     });
-                }, 10);
             }
-
         }
     };
 
@@ -97,9 +106,10 @@
 
             console.log('========== START SENDING MESSAGES ' + channel.type);
             channel.postMessage({
+                from: 'main',
                 step: 0
             });
-            console.log('main: message send');
+            console.log('main: message send (0)');
         }, false);
         worker.postMessage({
             'cmd': 'start',
