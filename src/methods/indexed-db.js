@@ -28,14 +28,12 @@ const FALLBACK_INTERVAL = 100;
 export const type = 'idb';
 
 export function getIdb() {
-    const IndexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
-    const IDBTransaction = window.IDBTransaction || window.webkitIDBTransaction || window.msIDBTransaction;
-    const IDBKeyRange = window.IDBKeyRange || window.webkitIDBKeyRange || window.msIDBKeyRange;
-    return {
-        IndexedDB,
-        IDBTransaction,
-        IDBKeyRange
-    };
+    if(typeof indexedDB !== 'undefined') return indexedDB;
+    if(typeof mozIndexedDB !== 'undefined') return mozIndexedDB;
+    if(typeof webkitIndexedDB !== 'undefined') return webkitIndexedDB;
+    if(typeof msIndexedDB !== 'undefined') return msIndexedDB;
+
+    return false;
 }
 
 /**
@@ -56,9 +54,7 @@ export function getLocalStorage() {
 }
 
 export async function createDatabase(channelName) {
-    const {
-        IndexedDB
-    } = getIdb();
+    const IndexedDB = getIdb();
 
     // create table
     const dbName = DB_PREFIX + channelName;
@@ -143,7 +139,7 @@ export async function cleanOldMessages(db, messageObjects, ttl = MESSAGE_TTL) {
 export function pingOthers(channelState) {
     const localStorage = getLocalStorage();
 
-    if(!channelState.useLocalStorage) return;
+    if (!channelState.useLocalStorage) return;
 
     const storageKey = DB_PREFIX + channelState.channelName;
 
@@ -305,6 +301,6 @@ export function canBeUsed() {
     if (isNode) return false;
     const idb = getIdb();
 
-    if (!idb.IndexedDB) return false;
+    if (!idb) return false;
     return true;
 };

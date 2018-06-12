@@ -5,19 +5,22 @@
 </head>
 
 <body id="body">
+    <div id="messages"></div>
 </body>
 
 <script>
-    const channel = new window.BroadcastChannel2('foobar');
+    var channel = new window.BroadcastChannel2('foobar');
+    var msgContainer = document.getElementById('messages');
     channel.onmessage = function(msg) {
-        console.log('recieved message');
+        console.log('iframe: recieved message(' + msg.step + '): ' + JSON.stringify(msg));
 
-        const body = document.getElementById('body');
-        body.innerHTML += JSON.stringify(msg) + '</br>';
+        msgContainer.innerHTML += JSON.stringify(msg) + '</br>';
 
-        if (msg.step === 'one') {
+        if (!msg.answer) {
+            console.log('iframe: answer back');
             channel.postMessage({
                 answer: true,
+                from: 'iframe',
                 original: msg
             });
         }

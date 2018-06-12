@@ -2,44 +2,110 @@
 
 <head>
     <script src="./broadcast-channel.browserify.js"></script>
+    <style>
+        .msg-box {
+            background-color: white;
+            width: 400px;
+            float: left;
+            height: 500px;
+        }
+
+        #right {
+            float: right;
+            background-color: white;
+            width: 400px;
+            min-height: 200px;
+            padding: 10px;
+        }
+    </style>
 </head>
 
 <body id="body">
+    <iframe src="./iframe.html" id="test-iframe" class="msg-box"></iframe>
+    <div id="messages" class="msg-box"></div>
 
-    <iframe src="./iframe.html" style="width: 200px; height: 200px; background-color: white;"></iframe>
+    <div id="right">
+        <h2>BroadcastChannel live test</h2>
+        <b>User-Agent:</b> <span id="user-agent">unknown</span><br />
+        <b>MessageCount:</b> <span id="msg-count">0</span><br />
+        <b>Amount Time:</b> <span id="time-amount">X</span><br />
+    </div>
 </body>
 
 
 <script>
     var body = document.getElementById('body');
+    var msgContainer = document.getElementById('messages');
+    var rightContainer = document.getElementById('right');
+    var messageCountContainer = document.getElementById('msg-count');
+
+    document.getElementById('user-agent').innerHTML = navigator.userAgent;
+
+    var startTime = new Date().getTime();
     var channel = new window.BroadcastChannel2('foobar');
-    var messages = [];
+
+    /**
+     * to measure the speed, we:
+     * 1. send message
+     * 2. wait until iframe and worker answers
+     * 3. repeat from 1. for 50 times
+     */
+    var messagesSend = 0;
+    var answerPool = {};
     channel.onmessage = function(msg) {
-        console.log('got answer');
-        console.dir(msg);
-        messages.push(msg);
+        console.log('main: recieved msg' + JSON.stringify(msg));
 
-        if (msg.original && msg.original.step === 'one') {
-            channel.postMessage({
-                step: 'two'
-            });
-        }
+        answerPool[msg.from] = msg;
+        msgContainer.innerHTML += JSON.stringify(msg) + '</br>';
+        if (answerPool.worker && answerPool.iframe) {
+            answerPool = {}; // reset
 
-        // check if sucess
-        if (messages.length === 2) {
-            console.log('sucess');
-            body.style.backgroundColor = 'green';
+            if (messagesSend >= 50) {
+                // sucess
+                console.log('main: sucess');
+                body.style.backgroundColor = 'green';
+                const amountTime = new Date().getTime() - startTime;
+                document.getElementById('time-amount').innerHTML = amountTime;
+            } else {
+                // send next message
+                console.log('main: send next message ====================');
+                setTimeout(function() {
+                    messagesSend++;
+                    messageCountContainer.innerHTML = messagesSend;
+                    channel.postMessage({
+                        foo: 'bar',
+                        step: messagesSend
+                    });
+                }, 10);
+            }
+
         }
     };
-    setTimeout(function() {
-        // send to iframe and await answer
-        console.log('sending message via ' + channel.type);
-        channel.postMessage({
-            step: 'one'
-        });
-        console.log('message send');
 
-    }, 1000);
+    // w8 until iframe has loaded
+    document.getElementById('test-iframe').onload = function() {
+        console.log('main: Iframe has loaded');
+        // spawn web-worker
+        var worker = new Worker('worker.js');
+        worker.onerror = function(event) {
+            throw new Error('worker: ' + event.message + " (" + event.filename + ":" + event.lineno + ")");
+        };
+
+        worker.addEventListener('message', function(e) {
+            // run when message returned, so we know the worker has started
+            console.log('main: Worker has started');
+
+            console.log('========== START SENDING MESSAGES ' + channel.type);
+            channel.postMessage({
+                step: 0
+            });
+            console.log('main: message send');
+        }, false);
+        worker.postMessage({
+            'cmd': 'start',
+            'msg': '???'
+        });
+    }
 </script>
 
 </html>

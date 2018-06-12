@@ -10,7 +10,6 @@ describe('unit/indexed-db.method.test.js', () => {
         it('should get an object', () => {
             const idb = IndexedDbMethod.getIdb();
             assert.ok(idb);
-            assert.ok(idb.IndexedDB);
         });
     });
     describe('.createDatabase()', () => {
