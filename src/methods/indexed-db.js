@@ -19,6 +19,11 @@ const OBJECT_STORE_ID = 'messages';
  */
 const MESSAGE_TTL = 1000 * 60 * 2; // 2 minutes
 
+/**
+ * if the 'storage'-even can not be used,
+ * we poll in this interval
+ */
+const FALLBACK_INTERVAL = 100;
 
 export const type = 'idb';
 
@@ -31,6 +36,23 @@ export function getIdb() {
         IDBTransaction,
         IDBKeyRange
     };
+}
+
+/**
+ * copied from
+ * https://github.com/tejacques/crosstab/blob/master/src/crosstab.js#L32
+ */
+export function getLocalStorage() {
+    let localStorage = null;
+    try {
+        localStorage = window.localStorage;
+        localStorage = window['ie8-eventlistener/storage'] || window.localStorage;
+    } catch (e) {
+        // New versions of Firefox throw a Security exception
+        // if cookies are disabled. See
+        // https://bugzilla.mozilla.org/show_bug.cgi?id=1028153
+    }
+    return localStorage;
 }
 
 export async function createDatabase(channelName) {
@@ -118,15 +140,19 @@ export async function cleanOldMessages(db, messageObjects, ttl = MESSAGE_TTL) {
  * sends a ping over the 'storage'-event
  * so other instances now that there are new messages
  */
-export function pingOthers(channelName) {
-    const storageKey = DB_PREFIX + channelName;
+export function pingOthers(channelState) {
+    const localStorage = getLocalStorage();
+
+    if(!channelState.useLocalStorage) return;
+
+    const storageKey = DB_PREFIX + channelState.channelName;
 
     /**
      * a random token must be set
      * because chrome will not send the storage-event
      * if prev- and now-value is equal
      */
-    const value =  randomToken(10);
+    const value = randomToken(10);
     localStorage.setItem(storageKey, value);
 
     /**
@@ -160,14 +186,16 @@ export async function create(channelName, options = {}) {
     // set defaults
     if (!options.idb) options.idb = {};
     if (!options.idb.ttl) options.idb.ttl = MESSAGE_TTL;
+    if (!options.idb.fallbackInterval) options.idb.fallbackInterval = FALLBACK_INTERVAL;
 
     // ensures we do not read messages in parrallel
     const readQueue = new IdleQueue(1);
     const writeQueue = new IdleQueue(1);
 
     const db = await createDatabase(channelName);
-
     const state = {
+        closed: false,
+        useLocalStorage: !!getLocalStorage(),
         channelName,
         options,
         uuid,
@@ -179,10 +207,23 @@ export async function create(channelName, options = {}) {
         db
     };
 
-    state.listener = addStorageEventListener(
-        channelName,
-        () => handleMessagePing(state)
-    );
+    if (state.useLocalStorage) {
+        state.listener = addStorageEventListener(
+            channelName,
+            () => handleMessagePing(state)
+        );
+    } else {
+        /**
+         * if localStorage-events can not be used,
+         * we have to pull new messages via interval
+         */
+        (async () => {
+            while (state.closed === false) {
+                await handleMessagePing(state);
+                await new Promise(res => setTimeout(res, 100));
+            }
+        })();
+    }
 
     return state;
 }
@@ -193,15 +234,15 @@ export async function create(channelName, options = {}) {
  */
 export async function handleMessagePing(state) {
     /**
+     * when there are no listener, we do nothing
+     */
+    if (!state.messagesCallback) return;
+
+    /**
      * if we have 2 or more read-tasks in the queue,
      * we do not have to set more
      */
     if (state.readQueue._idleCalls.size > 1) return;
-
-    /**
-     * when there are no listener, we do nothing
-     */
-    if (!state.messagesCallback) return;
 
     await state.readQueue.requestIdlePromise();
     await state.readQueue.wrapCall(
@@ -229,7 +270,8 @@ export async function handleMessagePing(state) {
 }
 
 export function close(channelState) {
-    removeStorageEventListener(channelState.listener);
+    channelState.closed = true;
+    if (channelState.listener) removeStorageEventListener(channelState.listener);
     channelState.readQueue.clear();
     channelState.writeQueue.clear();
     channelState.db.close();
@@ -241,9 +283,9 @@ export async function postMessage(channelState, messageJson) {
         channelState.uuid,
         messageJson
     );
-    pingOthers(channelState.channelName);
+    pingOthers(channelState);
 
-    if (randomInt(0, 5) === 0) {
+    if (randomInt(0, 10) === 0) {
         const messages = await getAllMessages(channelState.db);
         await cleanOldMessages(
             channelState.db,

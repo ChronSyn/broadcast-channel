@@ -94,7 +94,10 @@ describe('unit/indexed-db.method.test.js', () => {
                 ev => emitted.push(ev)
             );
 
-            IndexedDbMethod.pingOthers(channelName);
+            IndexedDbMethod.pingOthers({
+                channelName,
+                useLocalStorage: true
+            });
             await AsyncTestUtil.waitUntil(() => emitted.length === 1);
 
             IndexedDbMethod.removeStorageEventListener(listener);
@@ -110,7 +113,10 @@ describe('unit/indexed-db.method.test.js', () => {
             IndexedDbMethod.pingOthers(AsyncTestUtil.randomString(10));
             IndexedDbMethod.pingOthers(AsyncTestUtil.randomString(10));
             IndexedDbMethod.pingOthers(AsyncTestUtil.randomString(10));
-            IndexedDbMethod.pingOthers(channelName);
+            IndexedDbMethod.pingOthers({
+                channelName,
+                useLocalStorage: true
+            });
             await AsyncTestUtil.waitUntil(() => emitted.length === 1);
 
             await AsyncTestUtil.wait(100);
@@ -174,6 +180,43 @@ describe('unit/indexed-db.method.test.js', () => {
 
                 await IndexedDbMethod.close(channelStateOther);
                 await IndexedDbMethod.close(channelStateOwn);
+            });
+            /**
+             * localstorage-pings do not work in a web-workers,
+             * which means this should be detected and work over intervall
+             * @link https://stackoverflow.com/a/6179599/3443137
+             */
+            it('should also work if localstorage does not work', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+
+                // disable localStorage
+                const localStorageBefore = window.localStorage;
+                assert.ok(localStorageBefore);
+                Object.defineProperty(window, 'localStorage', {
+                    enumerable: false,
+                    configurable: false,
+                    writable: true,
+                    value: false
+                });
+
+
+                const emittedOther = [];
+                const channelStateOther = await IndexedDbMethod.create(channelName);
+                IndexedDbMethod.onMessage(channelStateOther, msg => emittedOther.push(msg), new Date().getTime());
+                await AsyncTestUtil.wait(100);
+
+                const channelStateOwn = await IndexedDbMethod.create(channelName);
+                const msgJson = {
+                    foo: 'bar'
+                };
+                await IndexedDbMethod.postMessage(channelStateOwn, msgJson);
+
+                await AsyncTestUtil.waitUntil(() => emittedOther.length === 1);
+                assert.deepEqual(emittedOther[0], msgJson);
+
+                await IndexedDbMethod.close(channelStateOther);
+                await IndexedDbMethod.close(channelStateOwn);
+                window.localStorage = localStorageBefore;
             });
         });
     });

@@ -2,13 +2,14 @@ declare type MethodType = 'node' | 'idb' | 'native';
 
 export type BroadcastChannelOptions = {
     type?: MethodType,
-    prepareDelay?: number,
+    prepareDelay?: number;
     node?: {
-        ttl?: number
-    },
+        ttl?: number;
+    };
     idb?: {
-        ttl?: number
-    }
+        ttl?: number;
+        fallbackInterval?: number;
+    };
 };
 
 /**

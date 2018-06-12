@@ -71,7 +71,7 @@ class BroadcastChannel {
         );
     }
     set onmessage(fn) {
-        const time = new Date().getTime();
+        const time = new Date().getTime() - 5;
         if (this._preparePromise) {
             this._preparePromise.then(() => {
                 this.method.onMessage(
