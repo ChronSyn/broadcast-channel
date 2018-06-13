@@ -37,23 +37,6 @@ export function getIdb() {
     return false;
 }
 
-/**
- * copied from
- * https://github.com/tejacques/crosstab/blob/master/src/crosstab.js#L32
- */
-export function getLocalStorage() {
-    let localStorage = null;
-    try {
-        localStorage = window.localStorage;
-        localStorage = window['ie8-eventlistener/storage'] || window.localStorage;
-    } catch (e) {
-        // New versions of Firefox throw a Security exception
-        // if cookies are disabled. See
-        // https://bugzilla.mozilla.org/show_bug.cgi?id=1028153
-    }
-    return localStorage;
-}
-
 export async function createDatabase(channelName) {
     const IndexedDB = getIdb();
 
@@ -64,8 +47,8 @@ export async function createDatabase(channelName) {
     openRequest.onupgradeneeded = ev => {
         const db = ev.target.result;
         db.createObjectStore(OBJECT_STORE_ID, {
-            keyPath: 'token', // primary
-            // autoIncrement:true
+            keyPath: 'id',
+            autoIncrement: true
         });
     };
     const db = await new Promise((res, rej) => {
@@ -84,7 +67,6 @@ export async function createDatabase(channelName) {
 export async function writeMessage(db, readerUuid, messageJson) {
     const time = new Date().getTime();
     const writeObject = {
-        token: randomToken(12),
         uuid: readerUuid,
         time,
         data: messageJson
@@ -118,65 +100,63 @@ export async function getAllMessages(db) {
     });
 }
 
-export async function cleanOldMessages(db, messageObjects, ttl = MESSAGE_TTL) {
+export async function getMessagesHigherThen(db, lastCursorId) {
+    const objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
+    const ret = [];
+    const keyRangeValue = IDBKeyRange.bound(lastCursorId + 1, Infinity);
+    return new Promise(res => {
+        objectStore.openCursor(keyRangeValue).onsuccess = ev => {
+            const cursor = ev.target.result;
+            if (cursor) {
+                ret.push(cursor.value);
+                //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
+                cursor.continue();
+            } else {
+                res(ret);
+            }
+        };
+    });
+}
+
+export async function removeMessageById(db, id) {
+    const request = db.transaction([OBJECT_STORE_ID], 'readwrite')
+        .objectStore(OBJECT_STORE_ID)
+        .delete(id);
+    return new Promise(res => {
+        request.onsuccess = () => res();
+    });
+}
+
+export async function getOldMessages(db, ttl){
     const olderThen = new Date().getTime() - ttl;
+    const objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
+    const ret = [];
+    return new Promise(res => {
+        objectStore.openCursor().onsuccess = ev => {
+            const cursor = ev.target.result;
+            if (cursor) {
+                const msgObk = cursor.value;
+                if (msgObk.time < olderThen) {
+                    ret.push(msgObk);
+                    //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
+                    cursor.continue();
+                } else {
+                    // no more old messages,
+                    res(ret);
+                    return;
+                }
+            } else {
+                res(ret);
+            }
+        };
+    });
+}
 
-    await Promise.all(
-        messageObjects
-        .filter(obj => obj.time < olderThen)
-        .map(obj => {
-            const request = db.transaction([OBJECT_STORE_ID], 'readwrite')
-                .objectStore(OBJECT_STORE_ID)
-                .delete(obj.token);
-            return new Promise(res => {
-                request.onsuccess = () => res();
-            });
-        })
+export async function cleanOldMessages(db, ttl = MESSAGE_TTL) {
+    const tooOld = await getOldMessages(db, ttl);
+    return Promise.all(
+        tooOld.map(msgObj => removeMessageById(db, msgObj.id))
     );
-}
-
-/**
- * sends a ping over the 'storage'-event
- * so other instances now that there are new messages
- */
-export function pingOthers(channelState) {
-    const localStorage = getLocalStorage();
-
-    if (!channelState.useLocalStorage) return;
-
-    const storageKey = DB_PREFIX + channelState.channelName;
-
-    /**
-     * a random token must be set
-     * because chrome will not send the storage-event
-     * if prev- and now-value is equal
-     */
-    const value = randomToken(10);
-    localStorage.setItem(storageKey, value);
-
-    /**
-     * StorageEvent does not fire the 'storage' event
-     * in the window that changes the state of the local storage.
-     * So we fire it manually
-     */
-    const ev = document.createEvent('Event');
-    ev.initEvent('storage', true, true);
-    ev.key = storageKey;
-    ev.newValue = value;
-    window.dispatchEvent(ev);
-};
-
-export function addStorageEventListener(channelName, fn) {
-    const storageKey = DB_PREFIX + channelName;
-    const listener = ev => {
-        if (ev.key === storageKey)
-            fn();
-    };
-    window.addEventListener('storage', listener);
-    return listener;
-}
-export function removeStorageEventListener(listener) {
-    window.removeEventListener('storage', listener);
 }
 
 export async function create(channelName, options = {}) {
@@ -194,7 +174,7 @@ export async function create(channelName, options = {}) {
     const db = await createDatabase(channelName);
     const state = {
         closed: false,
-        useLocalStorage: !!getLocalStorage(),
+        lastCursorId: 0,
         channelName,
         options,
         uuid,
@@ -205,13 +185,6 @@ export async function create(channelName, options = {}) {
         writeQueue,
         db
     };
-
-    if (state.useLocalStorage) {
-        state.listener = addStorageEventListener(
-            channelName,
-            () => handleMessagePing(state)
-        );
-    }
 
     /**
      * if service-workers are used,
@@ -247,18 +220,25 @@ export async function handleMessagePing(state) {
     await state.readQueue.requestIdlePromise();
     await state.readQueue.wrapCall(
         async () => {
-            const messages = await getAllMessages(state.db);
-            const useMessages = messages
+
+            const newerMessages = await getMessagesHigherThen(state.db, state.lastCursorId);
+            const useMessages = newerMessages
+                .map(msgObj => {
+                    if (msgObj.id > state.lastCursorId) {
+                        state.lastCursorId = msgObj.id;
+                    }
+                    return msgObj;
+                })
                 .filter(msgObj => msgObj.uuid !== state.uuid) // not send by own
-                .filter(msgObj => !state.emittedMessagesIds.has(msgObj.token)) // not already emitted
+                .filter(msgObj => !state.emittedMessagesIds.has(msgObj.id)) // not already emitted
                 .filter(msgObj => msgObj.time >= state.messagesCallbackTime) // not older then onMessageCallback
                 .sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time); // sort by time
 
             for (const msgObj of useMessages) {
                 if (state.messagesCallback) {
-                    state.emittedMessagesIds.add(msgObj.token);
+                    state.emittedMessagesIds.add(msgObj.id);
                     setTimeout(
-                        () => state.emittedMessagesIds.delete(msgObj.token),
+                        () => state.emittedMessagesIds.delete(msgObj.id),
                         state.options.idb.ttl * 2
                     );
 
@@ -271,7 +251,6 @@ export async function handleMessagePing(state) {
 
 export function close(channelState) {
     channelState.closed = true;
-    if (channelState.listener) removeStorageEventListener(channelState.listener);
     channelState.readQueue.clear();
     channelState.writeQueue.clear();
     channelState.db.close();
@@ -283,13 +262,10 @@ export async function postMessage(channelState, messageJson) {
         channelState.uuid,
         messageJson
     );
-    pingOthers(channelState);
 
     if (randomInt(0, 10) === 0) {
-        const messages = await getAllMessages(channelState.db);
-        await cleanOldMessages(
+        /* await (do not await) */ cleanOldMessages(
             channelState.db,
-            messages,
             channelState.options.idb.ttl
         );
     }

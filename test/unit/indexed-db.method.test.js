@@ -64,6 +64,35 @@ describe('unit/indexed-db.method.test.js', () => {
             assert.equal(messages.length, 2);
         });
     });
+    describe('.getOldMessages()', () => {
+        it('should only get too old messages', async () => {
+            const channelName = AsyncTestUtil.randomString(10);
+            const readerUuid = AsyncTestUtil.randomString(10);
+            const db = await IndexedDbMethod.createDatabase(channelName);
+            const msgJson = {
+                foo: 'old'
+            };
+
+            // write 10 messages
+            await Promise.all(
+                new Array(10).fill()
+                .map(() => IndexedDbMethod.writeMessage(db, readerUuid, msgJson))
+            );
+            await AsyncTestUtil.wait(500);
+
+            // write 2 new messages
+            await Promise.all(
+                new Array(10).fill()
+                .map(() => IndexedDbMethod.writeMessage(db, readerUuid, msgJson))
+            );
+
+            const tooOld = await IndexedDbMethod.getOldMessages(db, 200);
+            assert.equal(tooOld.length, 10);
+            tooOld.forEach(msg => {
+                assert.equal(msg.data.foo, 'old');
+            });
+        });
+    });
     describe('.cleanOldMessages()', () => {
         it('should clean up old messages', async () => {
             const channelName = AsyncTestUtil.randomString(10);
@@ -76,52 +105,33 @@ describe('unit/indexed-db.method.test.js', () => {
 
             await AsyncTestUtil.wait(500);
 
-            const messages = await IndexedDbMethod.getAllMessages(db);
-            await IndexedDbMethod.cleanOldMessages(db, messages, 200);
+            await IndexedDbMethod.cleanOldMessages(db, 200);
 
             IndexedDbMethod.getAllMessages(db); // call parallel
             const messagesAfter = await IndexedDbMethod.getAllMessages(db);
             assert.equal(messagesAfter.length, 0);
         });
     });
-    describe('.pingOthers()', () => {
-        it('should send and recieve a ping', async () => {
+    describe('.getMessagesHigherThen()', () => {
+        it('should only get messages with higher id', async () => {
             const channelName = AsyncTestUtil.randomString(10);
-            const emitted = [];
-            const listener = IndexedDbMethod.addStorageEventListener(
-                channelName,
-                ev => emitted.push(ev)
+            const readerUuid = AsyncTestUtil.randomString(10);
+            const db = await IndexedDbMethod.createDatabase(channelName);
+            const msgJson = {
+                foo: 'bar'
+            };
+
+            // write 10 messages
+            await Promise.all(
+                new Array(10).fill()
+                .map(() => IndexedDbMethod.writeMessage(db, readerUuid, msgJson))
             );
 
-            IndexedDbMethod.pingOthers({
-                channelName,
-                useLocalStorage: true
-            });
-            await AsyncTestUtil.waitUntil(() => emitted.length === 1);
-
-            IndexedDbMethod.removeStorageEventListener(listener);
-        });
-        it('should not recieve pings from other channels', async () => {
-            const channelName = AsyncTestUtil.randomString(10);
-            const emitted = [];
-            const listener = IndexedDbMethod.addStorageEventListener(
-                channelName,
-                ev => emitted.push(ev)
-            );
-
-            IndexedDbMethod.pingOthers(AsyncTestUtil.randomString(10));
-            IndexedDbMethod.pingOthers(AsyncTestUtil.randomString(10));
-            IndexedDbMethod.pingOthers(AsyncTestUtil.randomString(10));
-            IndexedDbMethod.pingOthers({
-                channelName,
-                useLocalStorage: true
-            });
-            await AsyncTestUtil.waitUntil(() => emitted.length === 1);
-
-            await AsyncTestUtil.wait(100);
-            assert.equal(emitted.length, 1);
-
-            IndexedDbMethod.removeStorageEventListener(listener);
+            // get last 5 messages
+            const lastFive = await IndexedDbMethod.getMessagesHigherThen(db, 5);
+            assert.equal(lastFive.length, 5);
+            assert.equal(lastFive[0].id, 6);
+            assert.equal(lastFive[4].id, 10);
         });
     });
     describe('core-functions', () => {

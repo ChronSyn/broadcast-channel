@@ -50,7 +50,8 @@ function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj;
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 // order is important
-var METHODS = [NativeMethod, // fastest
+var METHODS = [
+// NativeMethod, // fastest
 IndexeDbMethod];
 
 /**
@@ -252,7 +253,7 @@ module.exports = BroadcastChannel;
 Object.defineProperty(exports, "__esModule", {
     value: true
 });
-exports.postMessage = exports.handleMessagePing = exports.create = exports.cleanOldMessages = exports.getAllMessages = exports.writeMessage = exports.createDatabase = exports.type = undefined;
+exports.postMessage = exports.handleMessagePing = exports.create = exports.cleanOldMessages = exports.getOldMessages = exports.removeMessageById = exports.getMessagesHigherThen = exports.getAllMessages = exports.writeMessage = exports.createDatabase = exports.type = undefined;
 
 var _getIterator2 = require('babel-runtime/core-js/get-iterator');
 
@@ -292,8 +293,8 @@ var createDatabase = exports.createDatabase = function () {
                         openRequest.onupgradeneeded = function (ev) {
                             var db = ev.target.result;
                             db.createObjectStore(OBJECT_STORE_ID, {
-                                keyPath: 'token' // primary
-                                // autoIncrement:true
+                                keyPath: 'id',
+                                autoIncrement: true
                             });
                         };
                         _context.next = 6;
@@ -337,7 +338,6 @@ var writeMessage = exports.writeMessage = function () {
                     case 0:
                         time = new Date().getTime();
                         writeObject = {
-                            token: (0, _randomToken2['default'])(12),
                             uuid: readerUuid,
                             time: time,
                             data: messageJson
@@ -403,28 +403,30 @@ var getAllMessages = exports.getAllMessages = function () {
     };
 }();
 
-var cleanOldMessages = exports.cleanOldMessages = function () {
-    var _ref4 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee4(db, messageObjects) {
-        var ttl = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : MESSAGE_TTL;
-        var olderThen;
+var getMessagesHigherThen = exports.getMessagesHigherThen = function () {
+    var _ref4 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee4(db, lastCursorId) {
+        var objectStore, ret, keyRangeValue;
         return _regenerator2['default'].wrap(function _callee4$(_context4) {
             while (1) {
                 switch (_context4.prev = _context4.next) {
                     case 0:
-                        olderThen = new Date().getTime() - ttl;
-                        _context4.next = 3;
-                        return _promise2['default'].all(messageObjects.filter(function (obj) {
-                            return obj.time < olderThen;
-                        }).map(function (obj) {
-                            var request = db.transaction([OBJECT_STORE_ID], 'readwrite').objectStore(OBJECT_STORE_ID)['delete'](obj.token);
-                            return new _promise2['default'](function (res) {
-                                request.onsuccess = function () {
-                                    return res();
-                                };
-                            });
+                        objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
+                        ret = [];
+                        keyRangeValue = IDBKeyRange.bound(lastCursorId + 1, Infinity);
+                        return _context4.abrupt('return', new _promise2['default'](function (res) {
+                            objectStore.openCursor(keyRangeValue).onsuccess = function (ev) {
+                                var cursor = ev.target.result;
+                                if (cursor) {
+                                    ret.push(cursor.value);
+                                    //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
+                                    cursor['continue']();
+                                } else {
+                                    res(ret);
+                                }
+                            };
                         }));
 
-                    case 3:
+                    case 4:
                     case 'end':
                         return _context4.stop();
                 }
@@ -432,26 +434,120 @@ var cleanOldMessages = exports.cleanOldMessages = function () {
         }, _callee4, this);
     }));
 
-    return function cleanOldMessages(_x7, _x8) {
+    return function getMessagesHigherThen(_x6, _x7) {
         return _ref4.apply(this, arguments);
     };
 }();
 
-/**
- * sends a ping over the 'storage'-event
- * so other instances now that there are new messages
- */
+var removeMessageById = exports.removeMessageById = function () {
+    var _ref5 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee5(db, id) {
+        var request;
+        return _regenerator2['default'].wrap(function _callee5$(_context5) {
+            while (1) {
+                switch (_context5.prev = _context5.next) {
+                    case 0:
+                        request = db.transaction([OBJECT_STORE_ID], 'readwrite').objectStore(OBJECT_STORE_ID)['delete'](id);
+                        return _context5.abrupt('return', new _promise2['default'](function (res) {
+                            request.onsuccess = function () {
+                                return res();
+                            };
+                        }));
 
+                    case 2:
+                    case 'end':
+                        return _context5.stop();
+                }
+            }
+        }, _callee5, this);
+    }));
+
+    return function removeMessageById(_x8, _x9) {
+        return _ref5.apply(this, arguments);
+    };
+}();
+
+var getOldMessages = exports.getOldMessages = function () {
+    var _ref6 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee6(db, ttl) {
+        var olderThen, objectStore, ret;
+        return _regenerator2['default'].wrap(function _callee6$(_context6) {
+            while (1) {
+                switch (_context6.prev = _context6.next) {
+                    case 0:
+                        olderThen = new Date().getTime() - ttl;
+                        objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
+                        ret = [];
+                        return _context6.abrupt('return', new _promise2['default'](function (res) {
+                            objectStore.openCursor().onsuccess = function (ev) {
+                                var cursor = ev.target.result;
+                                if (cursor) {
+                                    var msgObk = cursor.value;
+                                    if (msgObk.time < olderThen) {
+                                        ret.push(msgObk);
+                                        //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
+                                        cursor['continue']();
+                                    } else {
+                                        // no more old messages,
+                                        res(ret);
+                                        return;
+                                    }
+                                } else {
+                                    res(ret);
+                                }
+                            };
+                        }));
+
+                    case 4:
+                    case 'end':
+                        return _context6.stop();
+                }
+            }
+        }, _callee6, this);
+    }));
+
+    return function getOldMessages(_x10, _x11) {
+        return _ref6.apply(this, arguments);
+    };
+}();
+
+var cleanOldMessages = exports.cleanOldMessages = function () {
+    var _ref7 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee7(db) {
+        var ttl = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : MESSAGE_TTL;
+        var tooOld;
+        return _regenerator2['default'].wrap(function _callee7$(_context7) {
+            while (1) {
+                switch (_context7.prev = _context7.next) {
+                    case 0:
+                        _context7.next = 2;
+                        return getOldMessages(db, ttl);
+
+                    case 2:
+                        tooOld = _context7.sent;
+                        return _context7.abrupt('return', _promise2['default'].all(tooOld.map(function (msgObj) {
+                            return removeMessageById(db, msgObj.id);
+                        })));
+
+                    case 4:
+                    case 'end':
+                        return _context7.stop();
+                }
+            }
+        }, _callee7, this);
+    }));
+
+    return function cleanOldMessages(_x13) {
+        return _ref7.apply(this, arguments);
+    };
+}();
 
 var create = exports.create = function () {
-    var _ref5 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee6(channelName) {
+    var _ref8 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee9(channelName) {
         var _this = this;
 
         var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
         var uuid, readQueue, writeQueue, db, state;
-        return _regenerator2['default'].wrap(function _callee6$(_context6) {
+        return _regenerator2['default'].wrap(function _callee9$(_context9) {
             while (1) {
-                switch (_context6.prev = _context6.next) {
+                switch (_context9.prev = _context9.next) {
                     case 0:
                         uuid = (0, _randomToken2['default'])(10);
 
@@ -464,14 +560,14 @@ var create = exports.create = function () {
                         // ensures we do not read messages in parrallel
                         readQueue = new _customIdleQueue2['default'](1);
                         writeQueue = new _customIdleQueue2['default'](1);
-                        _context6.next = 8;
+                        _context9.next = 8;
                         return createDatabase(channelName);
 
                     case 8:
-                        db = _context6.sent;
+                        db = _context9.sent;
                         state = {
                             closed: false,
-                            useLocalStorage: !!getLocalStorage(),
+                            lastCursorId: 0,
                             channelName: channelName,
                             options: options,
                             uuid: uuid,
@@ -483,61 +579,55 @@ var create = exports.create = function () {
                             db: db
                         };
 
-
-                        if (state.useLocalStorage) {
-                            state.listener = addStorageEventListener(channelName, function () {
-                                return handleMessagePing(state);
-                            });
-                        }
-
                         /**
                          * if service-workers are used,
                          * we have no 'storage'-event if they post a message,
                          * therefore we also have to set an interval
                          */
-                        (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee5() {
-                            return _regenerator2['default'].wrap(function _callee5$(_context5) {
+
+                        (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee8() {
+                            return _regenerator2['default'].wrap(function _callee8$(_context8) {
                                 while (1) {
-                                    switch (_context5.prev = _context5.next) {
+                                    switch (_context8.prev = _context8.next) {
                                         case 0:
                                             if (!(state.closed === false)) {
-                                                _context5.next = 7;
+                                                _context8.next = 7;
                                                 break;
                                             }
 
-                                            _context5.next = 3;
+                                            _context8.next = 3;
                                             return handleMessagePing(state);
 
                                         case 3:
-                                            _context5.next = 5;
+                                            _context8.next = 5;
                                             return new _promise2['default'](function (res) {
                                                 return setTimeout(res, state.options.idb.fallbackInterval);
                                             });
 
                                         case 5:
-                                            _context5.next = 0;
+                                            _context8.next = 0;
                                             break;
 
                                         case 7:
                                         case 'end':
-                                            return _context5.stop();
+                                            return _context8.stop();
                                     }
                                 }
-                            }, _callee5, _this);
+                            }, _callee8, _this);
                         }))();
 
-                        return _context6.abrupt('return', state);
+                        return _context9.abrupt('return', state);
 
-                    case 13:
+                    case 12:
                     case 'end':
-                        return _context6.stop();
+                        return _context9.stop();
                 }
             }
-        }, _callee6, this);
+        }, _callee9, this);
     }));
 
-    return function create(_x10) {
-        return _ref5.apply(this, arguments);
+    return function create(_x15) {
+        return _ref8.apply(this, arguments);
     };
 }();
 
@@ -548,51 +638,56 @@ var create = exports.create = function () {
 
 
 var handleMessagePing = exports.handleMessagePing = function () {
-    var _ref7 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee8(state) {
+    var _ref10 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee11(state) {
         var _this2 = this;
 
-        return _regenerator2['default'].wrap(function _callee8$(_context8) {
+        return _regenerator2['default'].wrap(function _callee11$(_context11) {
             while (1) {
-                switch (_context8.prev = _context8.next) {
+                switch (_context11.prev = _context11.next) {
                     case 0:
                         if (state.messagesCallback) {
-                            _context8.next = 2;
+                            _context11.next = 2;
                             break;
                         }
 
-                        return _context8.abrupt('return');
+                        return _context11.abrupt('return');
 
                     case 2:
                         if (!(state.readQueue._idleCalls.size > 1)) {
-                            _context8.next = 4;
+                            _context11.next = 4;
                             break;
                         }
 
-                        return _context8.abrupt('return');
+                        return _context11.abrupt('return');
 
                     case 4:
-                        _context8.next = 6;
+                        _context11.next = 6;
                         return state.readQueue.requestIdlePromise();
 
                     case 6:
-                        _context8.next = 8;
-                        return state.readQueue.wrapCall((0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee7() {
-                            var messages, useMessages, _iteratorNormalCompletion, _didIteratorError, _iteratorError, _loop, _iterator, _step;
+                        _context11.next = 8;
+                        return state.readQueue.wrapCall((0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee10() {
+                            var newerMessages, useMessages, _iteratorNormalCompletion, _didIteratorError, _iteratorError, _loop, _iterator, _step;
 
-                            return _regenerator2['default'].wrap(function _callee7$(_context7) {
+                            return _regenerator2['default'].wrap(function _callee10$(_context10) {
                                 while (1) {
-                                    switch (_context7.prev = _context7.next) {
+                                    switch (_context10.prev = _context10.next) {
                                         case 0:
-                                            _context7.next = 2;
-                                            return getAllMessages(state.db);
+                                            _context10.next = 2;
+                                            return getMessagesHigherThen(state.db, state.lastCursorId);
 
                                         case 2:
-                                            messages = _context7.sent;
-                                            useMessages = messages.filter(function (msgObj) {
+                                            newerMessages = _context10.sent;
+                                            useMessages = newerMessages.map(function (msgObj) {
+                                                if (msgObj.id > state.lastCursorId) {
+                                                    state.lastCursorId = msgObj.id;
+                                                }
+                                                return msgObj;
+                                            }).filter(function (msgObj) {
                                                 return msgObj.uuid !== state.uuid;
                                             }) // not send by own
                                             .filter(function (msgObj) {
-                                                return !state.emittedMessagesIds.has(msgObj.token);
+                                                return !state.emittedMessagesIds.has(msgObj.id);
                                             }) // not already emitted
                                             .filter(function (msgObj) {
                                                 return msgObj.time >= state.messagesCallbackTime;
@@ -604,15 +699,15 @@ var handleMessagePing = exports.handleMessagePing = function () {
                                             _iteratorNormalCompletion = true;
                                             _didIteratorError = false;
                                             _iteratorError = undefined;
-                                            _context7.prev = 7;
+                                            _context10.prev = 7;
 
                                             _loop = function _loop() {
                                                 var msgObj = _step.value;
 
                                                 if (state.messagesCallback) {
-                                                    state.emittedMessagesIds.add(msgObj.token);
+                                                    state.emittedMessagesIds.add(msgObj.id);
                                                     setTimeout(function () {
-                                                        return state.emittedMessagesIds['delete'](msgObj.token);
+                                                        return state.emittedMessagesIds['delete'](msgObj.id);
                                                     }, state.options.idb.ttl * 2);
 
                                                     state.messagesCallback(msgObj.data);
@@ -622,104 +717,89 @@ var handleMessagePing = exports.handleMessagePing = function () {
                                             for (_iterator = (0, _getIterator3['default'])(useMessages); !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
                                                 _loop();
                                             }
-                                            _context7.next = 16;
+                                            _context10.next = 16;
                                             break;
 
                                         case 12:
-                                            _context7.prev = 12;
-                                            _context7.t0 = _context7['catch'](7);
+                                            _context10.prev = 12;
+                                            _context10.t0 = _context10['catch'](7);
                                             _didIteratorError = true;
-                                            _iteratorError = _context7.t0;
+                                            _iteratorError = _context10.t0;
 
                                         case 16:
-                                            _context7.prev = 16;
-                                            _context7.prev = 17;
+                                            _context10.prev = 16;
+                                            _context10.prev = 17;
 
                                             if (!_iteratorNormalCompletion && _iterator['return']) {
                                                 _iterator['return']();
                                             }
 
                                         case 19:
-                                            _context7.prev = 19;
+                                            _context10.prev = 19;
 
                                             if (!_didIteratorError) {
-                                                _context7.next = 22;
+                                                _context10.next = 22;
                                                 break;
                                             }
 
                                             throw _iteratorError;
 
                                         case 22:
-                                            return _context7.finish(19);
+                                            return _context10.finish(19);
 
                                         case 23:
-                                            return _context7.finish(16);
+                                            return _context10.finish(16);
 
                                         case 24:
                                         case 'end':
-                                            return _context7.stop();
+                                            return _context10.stop();
                                     }
                                 }
-                            }, _callee7, _this2, [[7, 12, 16, 24], [17,, 19, 23]]);
+                            }, _callee10, _this2, [[7, 12, 16, 24], [17,, 19, 23]]);
                         })));
 
                     case 8:
                     case 'end':
-                        return _context8.stop();
+                        return _context11.stop();
                 }
             }
-        }, _callee8, this);
+        }, _callee11, this);
     }));
 
-    return function handleMessagePing(_x11) {
-        return _ref7.apply(this, arguments);
+    return function handleMessagePing(_x16) {
+        return _ref10.apply(this, arguments);
     };
 }();
 
 var postMessage = exports.postMessage = function () {
-    var _ref9 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee9(channelState, messageJson) {
-        var messages;
-        return _regenerator2['default'].wrap(function _callee9$(_context9) {
+    var _ref12 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee12(channelState, messageJson) {
+        return _regenerator2['default'].wrap(function _callee12$(_context12) {
             while (1) {
-                switch (_context9.prev = _context9.next) {
+                switch (_context12.prev = _context12.next) {
                     case 0:
-                        _context9.next = 2;
+                        _context12.next = 2;
                         return writeMessage(channelState.db, channelState.uuid, messageJson);
 
                     case 2:
-                        pingOthers(channelState);
 
-                        if (!((0, _randomInt2['default'])(0, 10) === 0)) {
-                            _context9.next = 9;
-                            break;
+                        if ((0, _randomInt2['default'])(0, 10) === 0) {
+                            /* await (do not await) */cleanOldMessages(channelState.db, channelState.options.idb.ttl);
                         }
 
-                        _context9.next = 6;
-                        return getAllMessages(channelState.db);
-
-                    case 6:
-                        messages = _context9.sent;
-                        _context9.next = 9;
-                        return cleanOldMessages(channelState.db, messages, channelState.options.idb.ttl);
-
-                    case 9:
+                    case 3:
                     case 'end':
-                        return _context9.stop();
+                        return _context12.stop();
                 }
             }
-        }, _callee9, this);
+        }, _callee12, this);
     }));
 
-    return function postMessage(_x12, _x13) {
-        return _ref9.apply(this, arguments);
+    return function postMessage(_x17, _x18) {
+        return _ref12.apply(this, arguments);
     };
 }();
 
 exports.getIdb = getIdb;
-exports.getLocalStorage = getLocalStorage;
-exports.pingOthers = pingOthers;
-exports.addStorageEventListener = addStorageEventListener;
-exports.removeStorageEventListener = removeStorageEventListener;
 exports.close = close;
 exports.onMessage = onMessage;
 exports.canBeUsed = canBeUsed;
@@ -776,65 +856,8 @@ function getIdb() {
     return false;
 }
 
-/**
- * copied from
- * https://github.com/tejacques/crosstab/blob/master/src/crosstab.js#L32
- */
-function getLocalStorage() {
-    var localStorage = null;
-    try {
-        localStorage = window.localStorage;
-        localStorage = window['ie8-eventlistener/storage'] || window.localStorage;
-    } catch (e) {
-        // New versions of Firefox throw a Security exception
-        // if cookies are disabled. See
-        // https://bugzilla.mozilla.org/show_bug.cgi?id=1028153
-    }
-    return localStorage;
-}
-
-function pingOthers(channelState) {
-    var localStorage = getLocalStorage();
-
-    if (!channelState.useLocalStorage) return;
-
-    var storageKey = DB_PREFIX + channelState.channelName;
-
-    /**
-     * a random token must be set
-     * because chrome will not send the storage-event
-     * if prev- and now-value is equal
-     */
-    var value = (0, _randomToken2['default'])(10);
-    localStorage.setItem(storageKey, value);
-
-    /**
-     * StorageEvent does not fire the 'storage' event
-     * in the window that changes the state of the local storage.
-     * So we fire it manually
-     */
-    var ev = document.createEvent('Event');
-    ev.initEvent('storage', true, true);
-    ev.key = storageKey;
-    ev.newValue = value;
-    window.dispatchEvent(ev);
-};
-
-function addStorageEventListener(channelName, fn) {
-    var storageKey = DB_PREFIX + channelName;
-    var listener = function listener(ev) {
-        if (ev.key === storageKey) fn();
-    };
-    window.addEventListener('storage', listener);
-    return listener;
-}
-function removeStorageEventListener(listener) {
-    window.removeEventListener('storage', listener);
-}
-
 function close(channelState) {
     channelState.closed = true;
-    if (channelState.listener) removeStorageEventListener(channelState.listener);
     channelState.readQueue.clear();
     channelState.writeQueue.clear();
     channelState.db.close();
