@@ -650,15 +650,6 @@ var handleMessagePing = exports.handleMessagePing = function () {
                                             return _context7.finish(16);
 
                                         case 24:
-                                            if (!((0, _randomInt2['default'])(0, 10) === 0)) {
-                                                _context7.next = 27;
-                                                break;
-                                            }
-
-                                            _context7.next = 27;
-                                            return cleanOldMessages(state.db, messages, state.options.idb.ttl);
-
-                                        case 27:
                                         case 'end':
                                             return _context7.stop();
                                     }
@@ -681,6 +672,7 @@ var handleMessagePing = exports.handleMessagePing = function () {
 
 var postMessage = exports.postMessage = function () {
     var _ref9 = (0, _asyncToGenerator3['default'])( /*#__PURE__*/_regenerator2['default'].mark(function _callee9(channelState, messageJson) {
+        var messages;
         return _regenerator2['default'].wrap(function _callee9$(_context9) {
             while (1) {
                 switch (_context9.prev = _context9.next) {
@@ -691,7 +683,20 @@ var postMessage = exports.postMessage = function () {
                     case 2:
                         pingOthers(channelState);
 
-                    case 3:
+                        if (!((0, _randomInt2['default'])(0, 10) === 0)) {
+                            _context9.next = 9;
+                            break;
+                        }
+
+                        _context9.next = 6;
+                        return getAllMessages(channelState.db);
+
+                    case 6:
+                        messages = _context9.sent;
+                        _context9.next = 9;
+                        return cleanOldMessages(channelState.db, messages, channelState.options.idb.ttl);
+
+                    case 9:
                     case 'end':
                         return _context9.stop();
                 }
@@ -752,7 +757,7 @@ var MESSAGE_TTL = 1000 * 45; // 30 seconds
  * if the 'storage'-even can not be used,
  * we poll in this interval
  */
-var FALLBACK_INTERVAL = 100;
+var FALLBACK_INTERVAL = 0;
 
 var type = exports.type = 'idb';
 

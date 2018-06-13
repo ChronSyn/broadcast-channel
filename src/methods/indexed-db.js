@@ -24,7 +24,7 @@ const MESSAGE_TTL = 1000 * 45; // 30 seconds
  * if the 'storage'-even can not be used,
  * we poll in this interval
  */
-const FALLBACK_INTERVAL = 100;
+const FALLBACK_INTERVAL = 0;
 
 export const type = 'idb';
 
@@ -265,14 +265,6 @@ export async function handleMessagePing(state) {
                     state.messagesCallback(msgObj.data);
                 }
             }
-            if (randomInt(0, 10) === 0) {
-                await cleanOldMessages(
-                    state.db,
-                    messages,
-                    state.options.idb.ttl
-                );
-            }
-
         }
     );
 }
@@ -292,6 +284,15 @@ export async function postMessage(channelState, messageJson) {
         messageJson
     );
     pingOthers(channelState);
+
+    if (randomInt(0, 10) === 0) {
+        const messages = await getAllMessages(channelState.db);
+        await cleanOldMessages(
+            channelState.db,
+            messages,
+            channelState.options.idb.ttl
+        );
+    }
 }
 
 export function onMessage(channelState, fn, time) {

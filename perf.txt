@@ -1,0 +1,17 @@
+BEFORE:
+
+(clean application state), exmpty idb
+- intervall-timeout set to zero
+2220ms
+2494ms
+2235ms
+
+// series run without cleaning the state
+2385
+4813
+6079
+7553
+9573
+
+
+AFTER:
