@@ -21,7 +21,7 @@ const configuration = {
         enabled: true,
         usePhantomJS: false,
         postDetection: function(availableBrowser) {
-            return ['Chrome']; // comment in to test specific browser
+            // return ['Chrome']; // comment in to test specific browser
             // return ['Firefox']; // comment in to test specific browser
             const browsers = availableBrowser
                 .filter(b => !['PhantomJS', 'FirefoxAurora', 'FirefoxNightly'].includes(b))
@@ -29,11 +29,11 @@ const configuration = {
                     if (b === 'aaChrome') return 'ChromeNoSandbox';
                     else return b;
                 });
-            if (browsers.length > 1) {
-                console.log('!!!!!');
+            /*            if (browsers.length > 1) {
+                            console.log('!!!!!');
 
-                return ['ChromeNoSandbox'];
-            }
+                            return ['ChromeNoSandbox'];
+                        }*/
             return browsers;
         }
     },

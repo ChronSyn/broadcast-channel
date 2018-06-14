@@ -11,7 +11,8 @@ fixture `Example page`
 
 [
     'idb',
-    'native'
+    'native',
+    'default'
 ].forEach(methodType => {
     test.page(BASE_PAGE + '?methodType=' + methodType)('test with method: ' + methodType, async () => {
         console.log('##### START TEST WITH ' + methodType);

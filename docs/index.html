@@ -54,7 +54,7 @@
     }
 
     var methodType = getParameterByName('methodType');
-    if (!methodType || methodType === '') methodType = undefined;
+    if (!methodType || methodType === '' || methodType === 'default') methodType = undefined;
 
     var TEST_MESSAGES = 100;
     var body = document.getElementById('body');
