@@ -24,7 +24,7 @@ const MESSAGE_TTL = 1000 * 45; // 30 seconds
  * if the 'storage'-even can not be used,
  * we poll in this interval
  */
-const FALLBACK_INTERVAL = 0;
+const FALLBACK_INTERVAL = 50;
 
 export const type = 'idb';
 
