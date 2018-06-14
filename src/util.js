@@ -9,3 +9,17 @@ export function isPromise(obj) {
         return false;
     }
 }
+
+/**
+ * windows sucks
+ * @link https://gist.github.com/domenic/2790533#gistcomment-331356
+ */
+export function cleanPipeName(str) {
+    if (process.platform === 'win32') {
+        str = str.replace(/^\//, '');
+        str = str.replace(/\//g, '-');
+        return '\\\\.\\pipe\\' + str;
+    } else {
+        return str;
+    }
+};

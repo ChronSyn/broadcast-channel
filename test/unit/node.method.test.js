@@ -2,6 +2,8 @@ const AsyncTestUtil = require('async-test-util');
 const assert = require('assert');
 const isNode = require('detect-node');
 
+const util = require('../../dist/lib/util.js');
+
 describe('unit/node.method.test.js', () => {
     /**
      * do not run in browser-tests
@@ -57,7 +59,7 @@ describe('unit/node.method.test.js', () => {
             const client = new net.Socket();
             await new Promise(res => {
                 client.connect(
-                    socket.path,
+                    util.cleanPipeName(socket.path),
                     () => {
                         res();
                     }

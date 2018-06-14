@@ -19,6 +19,10 @@ import randomInt from 'random-int';
 import IdleQueue from 'custom-idle-queue';
 import unload from 'unload';
 
+import {
+    cleanPipeName
+} from '../util';
+
 const mkdir = util.promisify(fs.mkdir);
 const writeFile = util.promisify(fs.writeFile);
 const readFile = util.promisify(fs.readFile);
@@ -106,7 +110,7 @@ export async function createSocketEventEmitter(channelName, readerUuid) {
         });
 
     await new Promise(res => {
-        server.listen(pathToSocket, () => {
+        server.listen(cleanPipeName(pathToSocket), () => {
             res();
         });
     });
@@ -126,7 +130,7 @@ export async function openClientConnection(channelName, readerUuid) {
     const client = new net.Socket();
     await new Promise(res => {
         client.connect(
-            pathToSocket,
+            cleanPipeName(pathToSocket),
             res
         );
     });
