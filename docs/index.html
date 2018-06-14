@@ -22,7 +22,7 @@
 </head>
 
 <body id="body">
-    <iframe src="./iframe.html" id="test-iframe" class="msg-box"></iframe>
+    <iframe id="test-iframe" class="msg-box"></iframe>
     <div id="messages" class="msg-box"></div>
 
     <div id="right">
@@ -33,6 +33,7 @@
         <b>Method:</b> <span id="method">X</span><br />
         <b>MessageCount:</b> <span id="msg-count">0</span><br />
         <b>Amount Time:</b> <span id="time-amount">X</span><br />
+        <b>State:</b> <b><span id="state">Running</span></b><br />
         <br/>
         <p>This is kirby, which stucks if the process is blocked</p>
         <img src="kirby.gif" />
@@ -41,16 +42,35 @@
 
 
 <script>
+    // https://stackoverflow.com/a/901144/3443137
+    function getParameterByName(name, url) {
+        if (!url) url = window.location.href;
+        name = name.replace(/[\[\]]/g, "\\$&");
+        var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
+            results = regex.exec(url);
+        if (!results) return null;
+        if (!results[2]) return '';
+        return decodeURIComponent(results[2].replace(/\+/g, " "));
+    }
+
+    var methodType = getParameterByName('methodType');
+    if (!methodType || methodType === '') methodType = undefined;
+
     var TEST_MESSAGES = 100;
     var body = document.getElementById('body');
     var msgContainer = document.getElementById('messages');
     var rightContainer = document.getElementById('right');
     var messageCountContainer = document.getElementById('msg-count');
+    var stateContainer = document.getElementById('state');
+    const iframeEl = document.getElementById('test-iframe');
 
     document.getElementById('user-agent').innerHTML = navigator.userAgent;
 
     var startTime = new Date().getTime();
-    var channel = new window.BroadcastChannel2('foobar');
+    const options = {};
+    var channel = new window.BroadcastChannel2('foobar', {
+        type: methodType
+    });
     document.getElementById('method').innerHTML = channel.type;
 
     /**
@@ -75,24 +95,28 @@
                 // sucess
                 console.log('main: sucess');
                 body.style.backgroundColor = 'green';
+                stateContainer.innerHTML = 'SUCCESS'
                 const amountTime = new Date().getTime() - startTime;
                 document.getElementById('time-amount').innerHTML = amountTime + 'ms';
             } else {
                 // send next message
                 messagesSend++;
                 console.log('main: send next message (' + messagesSend + ') ====================');
-                    messageCountContainer.innerHTML = messagesSend;
-                    channel.postMessage({
-                        from: 'main',
-                        foo: 'bar',
-                        step: messagesSend
-                    });
+                messageCountContainer.innerHTML = messagesSend;
+                channel.postMessage({
+                    from: 'main',
+                    foo: 'bar',
+                    step: messagesSend
+                });
             }
         }
     };
 
+    // set iframe src
+    iframeEl.src = './iframe.html?channelName=' + channel.name + '&methodType=' + channel.type;
+
     // w8 until iframe has loaded
-    document.getElementById('test-iframe').onload = function() {
+    iframeEl.onload = function() {
         console.log('main: Iframe has loaded');
         // spawn web-worker
         var worker = new Worker('worker.js');
@@ -113,7 +137,10 @@
         }, false);
         worker.postMessage({
             'cmd': 'start',
-            'msg': '???'
+            'msg': {
+                channelName: channel.name,
+                methodType: channel.type
+            }
         });
     }
 </script>

@@ -9,7 +9,7 @@ import * as NativeMethod from './methods/native';
 
 // order is important
 let METHODS = [
-    // NativeMethod, // fastest
+    NativeMethod, // fastest
     IndexeDbMethod
 ];
 

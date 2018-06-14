@@ -31,6 +31,7 @@
     "test": "npm run test:node && npm run test:browser",
     "test:node": "npm run build && mocha ./test/index.test.js -b --timeout 6000 --exit",
     "test:browser": "npm run build && karma start ./config/karma.conf.js --single-run",
+    "test:e2e": "concurrently \"npm run docs:serve\" \"testcafe all test/e2e.test.js\" --kill-others --success first",
     "lint": "eslint --ignore-path ./config/.eslintignore src test config scripts",
     "clear": "rimraf -rf ./dist && rimraf -rf ./gen",
     "build:es6": "rimraf -rf dist/es && cross-env NODE_ENV=es6 babel src --out-dir dist/es",
@@ -38,7 +39,8 @@
     "build:browser": "browserify dist/lib/browserify.index.js > dist/broadcast-channel.browserify.js && cp  dist/broadcast-channel.browserify.js ./docs",
     "build:worker": "browserify test/scripts/worker.js > docs/worker.js",
     "build": "npm run clear && concurrently \"npm run build:es6\" \"npm run build:es5\" && concurrently \"npm run build:browser\" \"npm run build:worker\"",
-    "docs:serve": "npm run build && http-server ./docs"
+    "docs:only": "http-server ./docs",
+    "docs:serve": "npm run build && npm run docs:only"
   },
   "pre-commit": [
     "lint"
@@ -97,6 +99,8 @@
     "mocha": "5.2.0",
     "node": "10.4.0",
     "pre-commit": "1.2.2",
-    "rimraf": "2.6.2"
+    "rimraf": "2.6.2",
+    "testcafe": "^0.20.3",
+    "testcafe-hammerhead": "^14.0.0"
   }
 }
