@@ -2,6 +2,7 @@ node_modules/
 test_tmp/
 package-lock.json
 .idea/
+.vscode/
 .transpile_state.json
 .com.google.*
 shelljs_*

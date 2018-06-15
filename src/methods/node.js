@@ -38,7 +38,6 @@ const TMP_FOLDER_NAME = 'pubkey.broadcast-channel';
 const MESSAGE_TTL = 1000 * 60 * 2; // 2 minutes
 
 export function getPaths(channelName) {
-
     const folderPathBase = path.join(
         os.tmpdir(),
         TMP_FOLDER_NAME
@@ -85,7 +84,34 @@ export function socketPath(channelName, readerUuid) {
         paths.readers,
         readerUuid + '.sock'
     );
+    return cleanPipeName(socketPath);
+}
+
+export function socketInfoPath(channelName, readerUuid) {
+    const paths = getPaths(channelName);
+    const socketPath = path.join(
+        paths.readers,
+        readerUuid + '.json'
+    );
     return socketPath;
+}
+
+
+/**
+ * Because it is not possible to get all socket-files in a folder,
+ * when used under fucking windows,
+ * we have to set a normal file so other readers know our socket exists
+ */
+export async function createSocketInfoFile(channelName, readerUuid) {
+    await ensureFoldersExist(channelName);
+    const pathToFile = socketInfoPath(channelName, readerUuid);
+    await writeFile(
+        pathToFile,
+        JSON.stringify({
+            time: new Date().getTime()
+        })
+    );
+    return pathToFile;
 }
 
 /**
@@ -98,11 +124,11 @@ export async function createSocketEventEmitter(channelName, readerUuid) {
     const emitter = new events.EventEmitter();
     const server = net
         .createServer(stream => {
-            stream.on('end', function() {
+            stream.on('end', function () {
                 // console.log('server: end');
             });
 
-            stream.on('data', function(msg) {
+            stream.on('data', function (msg) {
                 // console.log('server: got data:');
                 // console.dir(msg.toString());
                 emitter.emit('data', msg.toString());
@@ -110,7 +136,7 @@ export async function createSocketEventEmitter(channelName, readerUuid) {
         });
 
     await new Promise(res => {
-        server.listen(cleanPipeName(pathToSocket), () => {
+        server.listen(pathToSocket, () => {
             res();
         });
     });
@@ -130,7 +156,7 @@ export async function openClientConnection(channelName, readerUuid) {
     const client = new net.Socket();
     await new Promise(res => {
         client.connect(
-            cleanPipeName(pathToSocket),
+            pathToSocket,
             res
         );
     });
@@ -150,7 +176,8 @@ export async function writeMessage(channelName, readerUuid, messageJson) {
         data: messageJson
     };
 
-    const fileName = time + '_' + readerUuid + '_' + randomToken(12) + '.json';
+    const token = randomToken(12);
+    const fileName = time + '_' + readerUuid + '_' + token + '.json';
 
     const msgPath = path.join(
         getPaths(channelName).messages,
@@ -162,7 +189,12 @@ export async function writeMessage(channelName, readerUuid, messageJson) {
         JSON.stringify(writeObject)
     );
 
-    return msgPath;
+    return {
+        time,
+        uuid: readerUuid,
+        token,
+        path: msgPath
+    }
 }
 
 /**
@@ -172,7 +204,21 @@ export async function writeMessage(channelName, readerUuid, messageJson) {
 export async function getReadersUuids(channelName) {
     const readersPath = getPaths(channelName).readers;
     const files = await readdir(readersPath);
-    return files.map(file => file.split('.')[0]);
+
+    return files
+        .map(file => file.split('.'))
+        .filter(split => split[1] === 'json') // do not scan .socket-files
+        .map(split => split[0]);
+}
+
+export async function messagePath(channelName, time, token, writerUuid) {
+    const fileName = time + '_' + writerUuid + '_' + token + '.json';
+
+    const msgPath = path.join(
+        getPaths(channelName).messages,
+        fileName
+    );
+    return msgPath;
 }
 
 export async function getAllMessages(channelName) {
@@ -204,8 +250,8 @@ export async function cleanOldMessages(messageObjects, ttl = MESSAGE_TTL) {
 
     await Promise.all(
         messageObjects
-        .filter(obj => obj.time < olderThen)
-        .map(obj => unlink(obj.path).catch(() => null))
+            .filter(obj => obj.time < olderThen)
+            .map(obj => unlink(obj.path).catch(() => null))
     );
 }
 
@@ -232,11 +278,11 @@ export async function create(channelName, options = {}) {
     const otherReaderClients = {};
     await Promise.all(
         otherReaderUuids
-        .filter(readerUuid => readerUuid !== uuid) // not own
-        .map(async (readerUuid) => {
-            const client = await openClientConnection(channelName, readerUuid);
-            otherReaderClients[readerUuid] = client;
-        })
+            .filter(readerUuid => readerUuid !== uuid) // not own
+            .map(async (readerUuid) => {
+                const client = await openClientConnection(channelName, readerUuid);
+                otherReaderClients[readerUuid] = client;
+            })
     );
 
     // ensures we do not read messages in parrallel
@@ -261,7 +307,11 @@ export async function create(channelName, options = {}) {
     };
 
     // when new message comes in, we read it and emit it
-    socketEE.emitter.on('data', () => handleMessagePing(state));
+    socketEE.emitter.on('data', data => {
+        console.log('=========');
+        console.dir(data);
+        handleMessagePing(state)
+    });
 
     return state;
 }
@@ -326,17 +376,17 @@ export async function postMessage(channelState, messageJson) {
 
     await Promise.all(
         otherReaders
-        .filter(readerUuid => readerUuid !== channelState.uuid) // not own
-        .filter(readerUuid => !channelState.otherReaderClients[readerUuid]) // not already has client
-        .map(async (readerUuid) => {
-            const client = await openClientConnection(channelState.channelName, readerUuid);
-            channelState.otherReaderClients[readerUuid] = client;
-        })
+            .filter(readerUuid => readerUuid !== channelState.uuid) // not own
+            .filter(readerUuid => !channelState.otherReaderClients[readerUuid]) // not already has client
+            .map(async (readerUuid) => {
+                const client = await openClientConnection(channelState.channelName, readerUuid);
+                channelState.otherReaderClients[readerUuid] = client;
+            })
     );
 
     // write message to fs
     await channelState.writeQueue.requestIdlePromise();
-    await channelState.writeQueue.wrapCall(
+    const msgObj = await channelState.writeQueue.wrapCall(
         () => writeMessage(
             channelState.channelName,
             channelState.uuid,
@@ -345,9 +395,17 @@ export async function postMessage(channelState, messageJson) {
     );
 
     // ping other readers
+    const pingObj = {
+        a: 'msg',
+        d: {
+            t: msgObj.t,
+            u: msgObj.uuid,
+            to: msgObj.token
+        }
+    }
     await Promise.all(
         Object.values(channelState.otherReaderClients)
-        .map(client => client.write('new'))
+            .map(client => client.write(JSON.stringify(pingObj)))
     );
 
     /**

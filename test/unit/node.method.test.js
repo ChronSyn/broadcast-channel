@@ -37,6 +37,18 @@ describe('unit/node.method.test.js', () => {
             await NodeMethod.ensureFoldersExist(channelName);
         });
     });
+    describe('.createSocketInfoFile()', () => {
+        it('should create the file', async () => {
+            const channelName = AsyncTestUtil.randomString(12);
+            const readerUuid = AsyncTestUtil.randomString(12);
+            const path = await NodeMethod.createSocketInfoFile(channelName, readerUuid);
+
+            assert.ok(path.endsWith(readerUuid + '.json'));
+
+            const exists = require('fs').existsSync(path);
+            assert.ok(exists);
+        });
+    });
     describe('.createSocketEventEmitter()', () => {
         it('should create the socket and subscribe', async () => {
             const channelName = AsyncTestUtil.randomString(12);
@@ -101,8 +113,12 @@ describe('unit/node.method.test.js', () => {
 
             const sockets = await Promise.all(
                 new Array(5).fill(0)
-                .map(() => AsyncTestUtil.randomString(6))
-                .map(readerUuid => NodeMethod.createSocketEventEmitter(channelName, readerUuid))
+                    .map(() => AsyncTestUtil.randomString(6))
+                    .map(async (readerUuid) => {
+                        await NodeMethod.createSocketInfoFile(channelName, readerUuid);
+                        const s = await NodeMethod.createSocketEventEmitter(channelName, readerUuid);
+                        return s;
+                    })
             );
 
             const uuids = await NodeMethod.getReadersUuids(channelName);
@@ -180,7 +196,7 @@ describe('unit/node.method.test.js', () => {
             // write 5 messages
             await Promise.all(
                 new Array(5).fill(0)
-                .map(() => NodeMethod.writeMessage(channelName, readerUuid, messageJson))
+                    .map(() => NodeMethod.writeMessage(channelName, readerUuid, messageJson))
             );
 
             // w8 until they time out
@@ -307,7 +323,7 @@ describe('unit/node.method.test.js', () => {
             // send 100 messages
             await Promise.all(
                 new Array(100).fill(0)
-                .map(() => NodeMethod.postMessage(channelStateOwn, msgJson))
+                    .map(() => NodeMethod.postMessage(channelStateOwn, msgJson))
             );
 
             // w8 until ttl has reached
@@ -316,7 +332,7 @@ describe('unit/node.method.test.js', () => {
             // send 100 messages again to trigger cleanup
             await Promise.all(
                 new Array(100).fill(0)
-                .map(() => NodeMethod.postMessage(channelStateOwn, msgJson))
+                    .map(() => NodeMethod.postMessage(channelStateOwn, msgJson))
             );
 
             // ensure only the last 100 messages are here
@@ -361,15 +377,15 @@ describe('unit/node.method.test.js', () => {
             const channelName = AsyncTestUtil.randomString(12);
             const readers = await Promise.all(
                 new Array(50).fill(0)
-                .map(async () => {
-                    const channelState = await NodeMethod.create(channelName);
-                    const emitted = [];
-                    NodeMethod.onMessage(channelState, msg => emitted.push(msg), new Date().getTime());
-                    return {
-                        channelState,
-                        emitted
-                    };
-                })
+                    .map(async () => {
+                        const channelState = await NodeMethod.create(channelName);
+                        const emitted = [];
+                        NodeMethod.onMessage(channelState, msg => emitted.push(msg), new Date().getTime());
+                        return {
+                            channelState,
+                            emitted
+                        };
+                    })
             );
 
             const senderState = await NodeMethod.create(channelName);
@@ -377,9 +393,9 @@ describe('unit/node.method.test.js', () => {
             // send 100 messages
             await Promise.all(
                 new Array(100).fill(0)
-                .map(() => NodeMethod.postMessage(senderState, {
-                    foo: 'bar'
-                }))
+                    .map(() => NodeMethod.postMessage(senderState, {
+                        foo: 'bar'
+                    }))
             );
 
             await AsyncTestUtil.waitUntil(() => {
