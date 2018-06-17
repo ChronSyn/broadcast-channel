@@ -229,12 +229,16 @@ function runTest(channelType) {
                 const emitted1 = [];
                 const emitted2 = [];
 
-                channel2.onmessage = msg => emitted1.push(msg);
-                channel2.onmessage = msg => emitted2.push(msg);
+                channel2.onmessage = msg => {
+                    emitted1.push(msg);
+                };
+                channel2.onmessage = msg => {
+                    emitted2.push(msg);
+                };
 
                 await channel.postMessage('foobar');
 
-                await AsyncTestUtil.waitUntil(() => emitted2.length === 1);
+                await AsyncTestUtil.waitUntil(() => emitted2.length >= 1);
                 await AsyncTestUtil.wait(100);
 
                 assert.equal(emitted1.length, 0);

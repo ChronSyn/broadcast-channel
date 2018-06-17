@@ -96,12 +96,12 @@ describe('unit/node.method.test.js', () => {
                 foo: 'bar'
             };
 
-            const msgPath = await NodeMethod.writeMessage(channelName, readerUuid, messageJson);
+            const msgObj = await NodeMethod.writeMessage(channelName, readerUuid, messageJson);
 
-            const exists = require('fs').existsSync(msgPath);
+            const exists = require('fs').existsSync(msgObj.path);
             assert.ok(exists);
 
-            const content = require(msgPath);
+            const content = require(msgObj.path);
             assert.equal(content.uuid, readerUuid);
             assert.deepEqual(content.data, messageJson);
         });
@@ -231,27 +231,54 @@ describe('unit/node.method.test.js', () => {
                 await NodeMethod.close(channelState2);
             });
         });
+        describe('.close()', () => {
+            it('should have cleaned up all', async () => {
+                const readdir = require('util').promisify(require('fs').readdir);
+
+                const channelName = AsyncTestUtil.randomString(12);
+                const channelState = await NodeMethod.create(channelName);
+                await NodeMethod.close(channelState);
+                await AsyncTestUtil.wait(200);
+
+                const paths = NodeMethod.getPaths(channelName);
+                const files = await readdir(paths.readers);
+                assert.equal(files.length, 0);
+            });
+        });
         describe('.postMessage()', () => {
+            it('should get a ping on other side', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channelStateOther = await NodeMethod.create(channelName);
+                const channelStateOwn = await NodeMethod.create(channelName);
+                const emittedOther = [];
+                channelStateOther.socketEE.emitter.on('data', d => emittedOther.push(d));
+
+                await NodeMethod.postMessage(channelStateOwn, 'foo bar');
+                await AsyncTestUtil.waitUntil(() => emittedOther.length === 1);
+
+                assert.equal(JSON.parse(emittedOther[0]).a, 'msg');
+                assert.equal(typeof JSON.parse(emittedOther[0]).d.t, 'number');
+
+                await NodeMethod.close(channelStateOther);
+                await NodeMethod.close(channelStateOwn);
+            });
             it('should send the message', async () => {
                 const channelName = AsyncTestUtil.randomString(12);
                 const channelStateOther = await NodeMethod.create(channelName);
                 const channelStateOwn = await NodeMethod.create(channelName);
+                await AsyncTestUtil.wait(100);
 
                 const emittedOther = [];
-                const emittedOwn = [];
-
-                channelStateOther.socketEE.emitter.on('data', d => emittedOther.push(d));
-                channelStateOwn.socketEE.emitter.on('data', d => emittedOwn.push(d));
+                NodeMethod.onMessage(channelStateOther, msg => emittedOther.push(msg), new Date().getTime());
 
                 const msgJson = {
-                    foo: 'bar'
+                    foo: 'bar2'
                 };
                 await NodeMethod.postMessage(channelStateOwn, msgJson);
 
-                await AsyncTestUtil.waitUntil(() => emittedOwn.length === 1);
                 await AsyncTestUtil.waitUntil(() => emittedOther.length === 1);
 
-                assert.deepEqual(emittedOwn[0], msgJson);
+                assert.deepEqual(emittedOther[0], msgJson);
 
                 await NodeMethod.close(channelStateOther);
                 await NodeMethod.close(channelStateOwn);
