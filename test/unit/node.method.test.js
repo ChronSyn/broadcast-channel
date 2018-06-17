@@ -334,7 +334,8 @@ describe('unit/node.method.test.js', () => {
         });
     });
     describe('other', () => {
-        it('should have cleaned up the messages', async () => {
+        it('should have cleaned up the messages', async function () {
+            this.timeout(1000 * 20); // slow on windows
             const channelOptions = {
                 node: {
                     ttl: 500

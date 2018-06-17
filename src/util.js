@@ -15,7 +15,10 @@ export function isPromise(obj) {
  * @link https://gist.github.com/domenic/2790533#gistcomment-331356
  */
 export function cleanPipeName(str) {
-    if (process.platform === 'win32') {
+    if (
+        process.platform === 'win32' &&
+        !str.startsWith('\\\\.\\pipe\\')
+    ) {
         str = str.replace(/^\//, '');
         str = str.replace(/\//g, '-');
         return '\\\\.\\pipe\\' + str;
