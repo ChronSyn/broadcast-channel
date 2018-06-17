@@ -112,6 +112,28 @@ function runTest(channelType) {
                 channel1.close();
                 channel2.close();
             });
+            it('should work with big message-data', async () => {
+                const channelName = AsyncTestUtil.randomString(12);
+                const channel1 = new BroadcastChannel(channelName, channelOptions);
+                const channel2 = new BroadcastChannel(channelName, channelOptions);
+
+                const emitted = [];
+                channel2.onmessage = msg => emitted.push(msg);
+
+                const msgJson = {
+                    one: AsyncTestUtil.randomString(1000),
+                    two: AsyncTestUtil.randomString(1000),
+                    three: AsyncTestUtil.randomString(1000),
+                };
+                await channel1.postMessage(msgJson);
+
+
+                await AsyncTestUtil.waitUntil(() => emitted.length === 1);
+                assert.deepEqual(emitted[0], msgJson);
+
+                channel1.close();
+                channel2.close();
+            });
             it('should not loose the message if _prepare() takes a while', async () => {
                 const channelName = AsyncTestUtil.randomString(12);
                 const slowerOptions = clone(channelOptions);
