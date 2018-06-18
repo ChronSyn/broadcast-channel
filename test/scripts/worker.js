@@ -2,12 +2,16 @@
 /**
  * used in the test-docs as web-worker
  */
-
+require('babel-polyfill');
 var BroadcastChannel = require('../../dist/lib/index.js');
 
 // overwrite console.log
-const logBefore = console.log;
-console.log = str => logBefore('worker: ' + str);
+try{
+    var logBefore = console.log;
+//    console.log = function (str) { logBefore('worker: ' + str); }    
+}catch(err){
+    // does not work in IE11
+}
 
 
 /**
@@ -15,10 +19,10 @@ console.log = str => logBefore('worker: ' + str);
  * when initialisation is done,
  * we have to set a interval here.
  */
-setInterval(function(){}, 10* 1000);
+//setInterval(function () { }, 10 * 1000);
 
 var channel;
-self.addEventListener('message', function(e) {
+self.addEventListener('message', function (e) {
     var data = e.data;
     switch (data.cmd) {
         case 'start':
@@ -29,7 +33,7 @@ self.addEventListener('message', function(e) {
                 type: data.msg.methodType
             });
             var messages = [];
-            channel.onmessage = function(msg) {
+            channel.onmessage = function (msg) {
                 console.log('recieved message(' + msg.step + ') from ' + msg.from + ': ' + JSON.stringify(msg));
                 if (!msg.answer) {
                     console.log('(' + msg.step + ') answer back');
