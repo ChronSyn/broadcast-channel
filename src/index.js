@@ -2,15 +2,17 @@ import isNode from 'detect-node';
 
 import {
     isPromise
-} from './util';
+} from './util.js';
 
-import * as IndexeDbMethod from './methods/indexed-db';
-import * as NativeMethod from './methods/native';
+import * as NativeMethod from './methods/native.js';
+import * as IndexeDbMethod from './methods/indexed-db.js';
+import * as LocalstorageMethod from './methods/localstorage.js';
 
 // order is important
 let METHODS = [
     NativeMethod, // fastest
-    IndexeDbMethod
+    IndexeDbMethod,
+    LocalstorageMethod
 ];
 
 /**

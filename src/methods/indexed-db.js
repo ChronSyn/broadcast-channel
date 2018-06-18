@@ -169,7 +169,6 @@ export async function create(channelName, options = {}) {
 
     // ensures we do not read messages in parrallel
     const readQueue = new IdleQueue(1);
-    const writeQueue = new IdleQueue(1);
 
     const db = await createDatabase(channelName);
     const state = {
@@ -182,7 +181,6 @@ export async function create(channelName, options = {}) {
         emittedMessagesIds: new Set(),
         messagesCallback: null,
         readQueue,
-        writeQueue,
         db
     };
 
@@ -251,7 +249,6 @@ export async function handleMessagePing(state) {
 export function close(channelState) {
     channelState.closed = true;
     channelState.readQueue.clear();
-    channelState.writeQueue.clear();
     channelState.db.close();
 }
 

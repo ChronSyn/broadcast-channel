@@ -291,6 +291,7 @@ function runTest(channelType) {
 if (isNode) {
     runTest('node');
 } else {
-    runTest('idb');
     runTest('native');
+    runTest('idb');
+    runTest('localstorage');
 }
