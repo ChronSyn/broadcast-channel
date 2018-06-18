@@ -9,6 +9,14 @@ var BroadcastChannel = require('../../dist/lib/index.js');
 const logBefore = console.log;
 console.log = str => logBefore('worker: ' + str);
 
+
+/**
+ * because shitware microsof-edge stucks the worker
+ * when initialisation is done,
+ * we have to set a interval here.
+ */
+setInterval(function(){}, 10* 1000);
+
 var channel;
 self.addEventListener('message', function(e) {
     var data = e.data;

@@ -21,7 +21,7 @@ const OBJECT_STORE_ID = 'messages';
 const MESSAGE_TTL = 1000 * 45; // 30 seconds
 
 /**
- * if the 'storage'-even can not be used,
+ * because the 'storage'-even can not be used in web-workers,
  * we poll in this interval
  */
 const FALLBACK_INTERVAL = 50;
@@ -127,7 +127,7 @@ export async function removeMessageById(db, id) {
     });
 }
 
-export async function getOldMessages(db, ttl){
+export async function getOldMessages(db, ttl) {
     const olderThen = new Date().getTime() - ttl;
     const objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
     const ret = [];
@@ -220,7 +220,6 @@ export async function handleMessagePing(state) {
     await state.readQueue.requestIdlePromise();
     await state.readQueue.wrapCall(
         async () => {
-
             const newerMessages = await getMessagesHigherThen(state.db, state.lastCursorId);
             const useMessages = newerMessages
                 .map(msgObj => {
