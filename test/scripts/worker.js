@@ -19,7 +19,7 @@ try{
  * when initialisation is done,
  * we have to set a interval here.
  */
-//setInterval(function () { }, 10 * 1000);
+setInterval(function () { }, 10 * 1000);
 
 var channel;
 self.addEventListener('message', function (e) {
