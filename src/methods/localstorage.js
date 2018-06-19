@@ -20,6 +20,7 @@ export const type = 'localstorage';
  */
 export function getLocalStorage() {
     let localStorage;
+    if (typeof window === 'undefined') return null;
     try {
         localStorage = window.localStorage;
         localStorage = window['ie8-eventlistener/storage'] || window.localStorage;
@@ -80,6 +81,10 @@ export function removeStorageEventListener(listener) {
 }
 
 export function create(channelName, options = {}) {
+    if(!canBeUsed()){
+        throw new Error('BroadcastChannel: localstorage cannot be used');
+    }
+
     const startTime = new Date().getTime();
     const uuid = randomToken(10);
 
@@ -100,6 +105,7 @@ export function create(channelName, options = {}) {
         emittedMessagesIds,
         writeQueue
     };
+
 
     state.listener = addStorageEventListener(
         channelName,

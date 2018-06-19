@@ -4,20 +4,23 @@
  */
 require('babel-polyfill');
 var BroadcastChannel = require('../../dist/lib/index.js');
-
-// https://stackoverflow.com/a/901144/3443137
-function getParameterByName(name, url) {
-    if (!url) url = window.location.href;
-    name = name.replace(/[\[\]]/g, "\\$&");
-    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
-        results = regex.exec(url);
-    if (!results) return null;
-    if (!results[2]) return '';
-    return decodeURIComponent(results[2].replace(/\+/g, " "));
-}
+import {
+    getParameterByName
+} from './util.js';
 
 var methodType = getParameterByName('methodType');
 if (!methodType || methodType === '' || methodType === 'default') methodType = undefined;
+
+// set select-input
+var selectEl = document.getElementById('method-type-select');
+selectEl.onchange = function (ev) {
+    var newValue = selectEl.value;
+    var newUrl = location.origin + '/?methodType=' + newValue;
+    location = newUrl;
+};
+if (methodType) {
+    selectEl.value = methodType;
+}
 
 var TEST_MESSAGES = 50;
 var body = document.getElementById('body');
@@ -46,6 +49,14 @@ document.getElementById('method').innerHTML = channel.type;
  */
 var messagesSend = 0;
 var answerPool = {};
+let useWorker = false;
+
+function gotAllAnswers(answerPool) {
+    if (!answerPool.iframe) return false;
+    if (useWorker && !answerPool.worker) return false;
+    return true;
+}
+
 channel.onmessage = function (msg) {
     console.log('main: recieved msg' + JSON.stringify(msg));
 
@@ -53,7 +64,7 @@ channel.onmessage = function (msg) {
     var textnode = document.createTextNode(JSON.stringify(msg) + '</br>');
     msgContainer.appendChild(textnode);
 
-    if (answerPool.worker && answerPool.iframe) {
+    if (gotAllAnswers(answerPool)) {
         answerPool = {}; // reset
 
         if (messagesSend >= TEST_MESSAGES) {
@@ -77,35 +88,44 @@ channel.onmessage = function (msg) {
     }
 };
 
-// set iframe src
-var rand = new Date().getTime();
-iframeEl.src = './iframe.html?channelName=' + channel.name + '&methodType=' + channel.type + '&t=' + rand;
+const run = async function () {
+    const rand = new Date().getTime();
+    console.log('aaaa');
 
-// w8 until iframe has loaded
-iframeEl.onload = function () {
+
+
+    // load iframe
+    iframeEl.src = './iframe.html?channelName=' + channel.name + '&methodType=' + channel.type + '&t=' + rand;
+    await new Promise(res => iframeEl.onload = () => res());
     console.log('main: Iframe has loaded');
-    // spawn web-worker
-    var worker = new Worker('worker.js?t=' + rand);
-    worker.onerror = function (event) {
-        throw new Error('worker: ' + event.message + " (" + event.filename + ":" + event.lineno + ")");
-    };
 
-    worker.addEventListener('message', function (e) {
-        // run when message returned, so we know the worker has started
-        console.log('main: Worker has started');
-
-        console.log('========== START SENDING MESSAGES ' + channel.type);
-        channel.postMessage({
-            from: 'main',
-            step: 0
+    // spawn web-worker if possible
+    if (channel.type !== 'localstorage' && typeof window.Worker === 'function') {
+        useWorker = true;
+        const worker = new Worker('worker.js?t=' + rand);
+        worker.onerror = event => {
+            throw new Error('worker: ' + event.message + " (" + event.filename + ":" + event.lineno + ")");
+        };
+        await new Promise(res => {
+            worker.addEventListener('message', e => {
+                // run when message returned, so we know the worker has started
+                console.log('main: Worker has started');
+                res();
+            }, false);
+            worker.postMessage({
+                'cmd': 'start',
+                'msg': {
+                    channelName: channel.name,
+                    methodType: channel.type
+                }
+            });
         });
-        console.log('main: message send (0)');
-    }, false);
-    worker.postMessage({
-        'cmd': 'start',
-        'msg': {
-            channelName: channel.name,
-            methodType: channel.type
-        }
+    }
+    console.log('========== START SENDING MESSAGES ' + channel.type);
+    channel.postMessage({
+        from: 'main',
+        step: 0
     });
+    console.log('main: message send (0)');
 }
+run();

@@ -22,7 +22,7 @@ const MESSAGE_TTL = 1000 * 45; // 30 seconds
 
 /**
  * because the 'storage'-even can not be used in web-workers,
- * we poll in this interval
+ * we poll in this interval from the indexedDb
  */
 const FALLBACK_INTERVAL = 50;
 
