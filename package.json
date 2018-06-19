@@ -50,6 +50,7 @@
   "dependencies": {
     "babel-runtime": "6.26.0",
     "custom-idle-queue": "2.0.1",
+    "clone": "2.1.1",
     "detect-node": "2.0.3",
     "js-sha3": "0.7.0",
     "random-int": "1.0.0",
@@ -80,7 +81,6 @@
     "babel-preset-es2017": "6.24.1",
     "babel-preset-latest": "6.24.1",
     "browserify": "16.2.2",
-    "clone": "2.1.1",
     "concurrently": "3.5.1",
     "convert-hrtime": "2.0.0",
     "copyfiles": "^2.0.0",

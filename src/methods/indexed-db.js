@@ -11,20 +11,12 @@ import randomToken from 'random-token';
 import randomInt from 'random-int';
 import IdleQueue from 'custom-idle-queue';
 
+import {
+    fillOptionsWithDefaults
+} from '../options';
+
 const DB_PREFIX = 'pubkey.broadcast-channel-0-';
 const OBJECT_STORE_ID = 'messages';
-
-/**
- * after this time the messages get deleted
- * It is assumed that all reader have consumed it by then
- */
-const MESSAGE_TTL = 1000 * 45; // 30 seconds
-
-/**
- * because the 'storage'-even can not be used in web-workers,
- * we poll in this interval from the indexedDb
- */
-const FALLBACK_INTERVAL = 50;
 
 export const type = 'idb';
 
@@ -152,7 +144,7 @@ export async function getOldMessages(db, ttl) {
     });
 }
 
-export async function cleanOldMessages(db, ttl = MESSAGE_TTL) {
+export async function cleanOldMessages(db, ttl) {
     const tooOld = await getOldMessages(db, ttl);
     return Promise.all(
         tooOld.map(msgObj => removeMessageById(db, msgObj.id))
@@ -160,12 +152,9 @@ export async function cleanOldMessages(db, ttl = MESSAGE_TTL) {
 }
 
 export async function create(channelName, options = {}) {
-    const uuid = randomToken(10);
+    options = fillOptionsWithDefaults(options);
 
-    // set defaults
-    if (!options.idb) options.idb = {};
-    if (!options.idb.ttl) options.idb.ttl = MESSAGE_TTL;
-    if (!options.idb.fallbackInterval) options.idb.fallbackInterval = FALLBACK_INTERVAL;
+    const uuid = randomToken(10);
 
     // ensures we do not read messages in parrallel
     const readQueue = new IdleQueue(1);

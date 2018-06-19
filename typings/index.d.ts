@@ -2,6 +2,7 @@ declare type MethodType = 'node' | 'idb' | 'native';
 
 export type BroadcastChannelOptions = {
     type?: MethodType,
+    webWorkerSupport?: boolean;
     prepareDelay?: number;
     node?: {
         ttl?: number;

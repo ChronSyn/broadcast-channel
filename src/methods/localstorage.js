@@ -10,8 +10,11 @@ import isNode from 'detect-node';
 import randomToken from 'random-token';
 import IdleQueue from 'custom-idle-queue';
 
+import {
+    fillOptionsWithDefaults
+} from '../options';
+
 const KEY_PREFIX = 'pubkey.broadcastChannel-';
-const REMOVE_TIMEOUT = 1000 * 60;
 export const type = 'localstorage';
 
 /**
@@ -81,16 +84,13 @@ export function removeStorageEventListener(listener) {
 }
 
 export function create(channelName, options = {}) {
+    options = fillOptionsWithDefaults(options);
     if(!canBeUsed()){
         throw new Error('BroadcastChannel: localstorage cannot be used');
     }
 
     const startTime = new Date().getTime();
     const uuid = randomToken(10);
-
-    // set defaults
-    if (!options.localstorage) options.localstorage = {};
-    if (!options.localstorage.removeTimeout) options.localstorage.removeTimeout = REMOVE_TIMEOUT;
 
     // contains all messages that have been emitted before
     const emittedMessagesIds = new Set();

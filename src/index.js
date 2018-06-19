@@ -1,40 +1,20 @@
-import isNode from 'detect-node';
-
 import {
     isPromise
 } from './util.js';
 
-import * as NativeMethod from './methods/native.js';
-import * as IndexeDbMethod from './methods/indexed-db.js';
-import * as LocalstorageMethod from './methods/localstorage.js';
+import {
+    chooseMethod
+} from './method-chooser.js';
 
-// order is important
-let METHODS = [
-    NativeMethod, // fastest
-    IndexeDbMethod,
-    LocalstorageMethod
-];
-
-/**
- * The NodeMethod is loaded lazy
- * so it will not get bundled in browser-builds
- */
-if (isNode) {
-    const NodeMethod = require('./methods/node.js');
-    METHODS.push(NodeMethod);
-}
-
+import {
+    fillOptionsWithDefaults
+} from './options.js';
 
 class BroadcastChannel {
     constructor(name, options = {}) {
         this.name = name;
-        this.options = options;
-
-        if (options.type) {
-            this.method = METHODS.find(m => m.type === options.type);
-        } else {
-            this.method = getFirstUseableMethod();
-        }
+        this.options = fillOptionsWithDefaults(options);
+        this.method = chooseMethod(this.options);
 
         this._preparePromise = null;
         this._prepare();
@@ -108,15 +88,6 @@ function messageHandler(fn, minTime) {
             fn(msgObj.data);
         }
     };
-}
-
-
-function getFirstUseableMethod() {
-    const useMethod = METHODS.find(method => method.canBeUsed());
-    if (!useMethod)
-        throw new Error('No useable methode found:' + JSON.stringify(METHODS.map(m => m.type)));
-    else
-        return useMethod;
 }
 
 export default BroadcastChannel;

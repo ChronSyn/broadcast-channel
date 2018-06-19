@@ -20,6 +20,10 @@ import IdleQueue from 'custom-idle-queue';
 import unload from 'unload';
 
 import {
+    fillOptionsWithDefaults
+} from '../options';
+
+import {
     cleanPipeName
 } from '../util';
 
@@ -31,11 +35,6 @@ const readdir = util.promisify(fs.readdir);
 
 
 const TMP_FOLDER_NAME = 'pubkey.broadcast-channel';
-/**
- * after this time the messages gets deleted
- * It is assumed that all reader have consumed it by then
- */
-const MESSAGE_TTL = 1000 * 60 * 2; // 2 minutes
 
 export function getPaths(channelName) {
     const folderPathBase = path.join(
@@ -260,7 +259,7 @@ export async function readMessage(messageObj) {
     return JSON.parse(content);
 }
 
-export async function cleanOldMessages(messageObjects, ttl = MESSAGE_TTL) {
+export async function cleanOldMessages(messageObjects, ttl) {
     const olderThen = new Date().getTime() - ttl;
 
     await Promise.all(
@@ -275,9 +274,7 @@ export async function cleanOldMessages(messageObjects, ttl = MESSAGE_TTL) {
 export const type = 'node';
 
 export async function create(channelName, options = {}) {
-    // set defaults
-    if (!options.node) options.node = {};
-    if (!options.node.ttl) options.node.ttl = MESSAGE_TTL;
+    options = fillOptionsWithDefaults(options);
 
     await ensureFoldersExist(channelName);
     const uuid = randomToken(10);

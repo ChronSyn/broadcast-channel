@@ -12,6 +12,7 @@ fixture `Example page`
 [
     'idb',
     'native',
+    'localstorage',
     'default'
 ].forEach(methodType => {
     test.page(BASE_PAGE + '?methodType=' + methodType)('test with method: ' + methodType, async () => {

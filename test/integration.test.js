@@ -281,6 +281,25 @@ function runTest(channelType) {
             });
         });
         describe('other', () => {
+            it('should prefer localstorage if webWorkerSupport: false', async () => {
+                if (isNode) return;
+                // disable BroadcastChannel
+                const broadcastChannelBefore = window.BroadcastChannel;
+                Object.defineProperty(window, 'BroadcastChannel', {
+                    enumerable: false,
+                    configurable: false,
+                    writable: true,
+                    value: false
+                });
+
+                const options = {
+                    webWorkerSupport: false
+                };
+                const channel = new BroadcastChannel(AsyncTestUtil.randomString(12), options);
+                assert.equal(channel.type, 'localstorage');
+
+                window.BroadcastChannel = broadcastChannelBefore;
+            });
             it('', () => {
                 console.log('Finiished: ' + channelType);
             });
