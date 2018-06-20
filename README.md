@@ -84,6 +84,7 @@ const channel = new BroadcastChannel('foobar', options);
 ## What this is
 
 This module is optimised for:
+
 - **low latency**: When you postMessage on one channel, it should take as low as possible time until other channels recieve the message.
 - **lossless**: When you send a message, it should be impossible that the message is lost before other channels recieved it
 - **low idle workload**: During the time when no messages are send, there should be a low processor footprint.

@@ -5,15 +5,15 @@
         .msg-box {
             background-color: white;
             width: 400px;
-            float: left;
+            float: right;
             height: 500px;
             overflow-y: scroll;
         }
 
         #right {
-            float: right;
+            float: left;
             background-color: white;
-            width: 300px;
+            width: 500px;
             min-height: 200px;
             padding: 10px;
         }
@@ -21,9 +21,6 @@
 </head>
 
 <body id="body">
-    <iframe id="test-iframe" class="msg-box"></iframe>
-    <div id="messages" class="msg-box"></div>
-
     <div id="right">
         <h2>BroadcastChannel live test</h2>
         <h4>(If this screen goes green, everything works)</h4>
@@ -56,6 +53,8 @@
         <p>This is kirby, which stucks if the process is blocked</p>
         <img src="kirby.gif" />
     </div>
+    <iframe id="test-iframe" class="msg-box"></iframe>
+    <div id="messages" class="msg-box"></div>
     <script src="./index.js"></script>
 </body>
 </html>
