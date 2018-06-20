@@ -27,3 +27,25 @@ AFTER:
 1448
 1450
 1397
+
+
+
+
+
+===================================
+20.06.2018
+===================================
+IndexedDB
+
+BEFORE:
+3610
+3380
+3489
+
+
+AFTER (with localstorage ping):
+4183
+3962
+3821
+
+=> sending localstorage-pings is slower
