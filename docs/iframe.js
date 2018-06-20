@@ -16305,63 +16305,62 @@ var _stringify = require('babel-runtime/core-js/json/stringify');
 
 var _stringify2 = _interopRequireDefault(_stringify);
 
+var _util = require('./util.js');
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 /* eslint-disable */
 /**
- * used in the test-docs as web-worker
+ * used in docs/iframe.html
  */
 require('babel-polyfill');
+
+
 var BroadcastChannel = require('../../dist/lib/index.js');
 
+var channelName = (0, _util.getParameterByName)('channelName');
+var methodType = (0, _util.getParameterByName)('methodType');
+
 // overwrite console.log
-try {
-    var logBefore = console.log;
-    //    console.log = function (str) { logBefore('worker: ' + str); }    
-} catch (err) {}
-// does not work in IE11
+var logBefore = console.log;
+console.log = function (str) {
+    logBefore('iframe: ' + str);
+};
 
+var channel = new BroadcastChannel(channelName, {
+    type: methodType
+});
+var msgContainer = document.getElementById('messages');
+channel.onmessage = function (msg) {
+    console.log('recieved message(' + msg.step + ') from ' + msg.from + ': ' + (0, _stringify2['default'])(msg));
 
-/**
- * because shitware microsof-edge stucks the worker
- * when initialisation is done,
- * we have to set a interval here.
- */
-setInterval(function () {}, 10 * 1000);
+    var textnode = document.createTextNode((0, _stringify2['default'])(msg) + '</br>');
+    msgContainer.appendChild(textnode);
 
-var channel;
-self.addEventListener('message', function (e) {
-    var data = e.data;
-    switch (data.cmd) {
-        case 'start':
-            console.log('Worker started');
-            console.log((0, _stringify2['default'])(data.msg));
+    if (!msg.answer) {
+        console.log('answer back(' + msg.step + ')');
+        channel.postMessage({
+            answer: true,
+            from: 'iframe',
+            original: msg
+        });
+    }
+};
+},{"../../dist/lib/index.js":1,"./util.js":472,"babel-polyfill":9,"babel-runtime/core-js/json/stringify":13}],472:[function(require,module,exports){
+'use strict';
 
-            channel = new BroadcastChannel(data.msg.channelName, {
-                type: data.msg.methodType
-            });
-            var messages = [];
-            channel.onmessage = function (msg) {
-                console.log('recieved message(' + msg.step + ') from ' + msg.from + ': ' + (0, _stringify2['default'])(msg));
-                if (!msg.answer) {
-                    console.log('(' + msg.step + ') answer back');
-                    channel.postMessage({
-                        answer: true,
-                        from: 'worker',
-                        original: msg
-                    });
-                }
-            };
-
-            self.postMessage('WORKER STARTED: ');
-            break;
-        case 'stop':
-            self.postMessage('WORKER STOPPED: ' + data.msg + '. (buttons will no longer work)');
-            channel.close();
-            self.close(); // Terminates the worker.
-            break;
-        default:
-            self.postMessage('Unknown command: ' + data.msg);
-    };
-}, false);
-},{"../../dist/lib/index.js":1,"babel-polyfill":9,"babel-runtime/core-js/json/stringify":13}]},{},[471]);
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+exports.getParameterByName = getParameterByName;
+// https://stackoverflow.com/a/901144/3443137
+function getParameterByName(name, url) {
+    if (!url) url = window.location.href;
+    name = name.replace(/[\[\]]/g, '\\$&');
+    var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)');
+    var results = regex.exec(url);
+    if (!results) return null;
+    if (!results[2]) return '';
+    return decodeURIComponent(results[2].replace(/\+/g, ' '));
+}
+},{}]},{},[471]);
