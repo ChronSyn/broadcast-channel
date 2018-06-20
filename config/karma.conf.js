@@ -20,20 +20,15 @@ const configuration = {
     detectBrowsers: {
         enabled: true,
         usePhantomJS: false,
-        postDetection: function(availableBrowser) {
+        postDetection: function (availableBrowser) {
             // return ['Chrome']; // comment in to test specific browser
             // return ['Firefox']; // comment in to test specific browser
             const browsers = availableBrowser
                 .filter(b => !['PhantomJS', 'FirefoxAurora', 'FirefoxNightly'].includes(b))
                 .map(b => {
-                    if (b === 'aaChrome') return 'ChromeNoSandbox';
+                    if (process.env.TRAVIS && b === 'Chrome') return 'Chrome_travis_ci';
                     else return b;
                 });
-            /*            if (browsers.length > 1) {
-                            console.log('!!!!!');
-
-                            return ['ChromeNoSandbox'];
-                        }*/
             return browsers;
         }
     },
@@ -67,23 +62,14 @@ const configuration = {
     browserDisconnectTimeout: 8000,
     processKillTimeout: 8000,
     customLaunchers: {
-        /*        ChromeNoSandbox: {
-                    base: 'Chrome',
-                    flags: ['--no-sandbox']
-                }*/
+        Chrome_travis_ci: {
+            base: 'Chrome',
+            flags: ['--no-sandbox']
+        }
     },
     singleRun: true
 };
 
-if (process.env.TRAVIS) {
-
-    /**
-     * overwrite reporters-default
-     * So no big list will be shown at log
-     */
-    // configuration.reporters = [];
-}
-
-module.exports = function(config) {
+module.exports = function (config) {
     config.set(configuration);
 };
