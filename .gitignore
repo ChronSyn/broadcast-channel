@@ -7,6 +7,3 @@ package-lock.json
 shelljs_*
 test_tmp/
 tmp/
-
-# TODO remove this before first build
-dist/
