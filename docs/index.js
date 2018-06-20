@@ -16398,7 +16398,7 @@ if (!methodType || methodType === '' || methodType === 'default') methodType = u
 var selectEl = document.getElementById('method-type-select');
 selectEl.onchange = function (ev) {
     var newValue = selectEl.value;
-    var newUrl = location.href + '/?methodType=' + newValue;
+    var newUrl = location.origin + location.pathname + '?methodType=' + newValue;
     location = newUrl;
 };
 if (methodType) {
