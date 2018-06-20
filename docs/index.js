@@ -16415,7 +16415,7 @@ var iframeEl = document.getElementById('test-iframe');
 
 document.getElementById('user-agent').innerHTML = navigator.userAgent;
 
-var startTime = new Date().getTime();
+var startTime;
 var options = {};
 console.log('++++++');
 console.log(typeof BroadcastChannel === 'undefined' ? 'undefined' : (0, _typeof3['default'])(BroadcastChannel));
@@ -16525,13 +16525,14 @@ var run = function () {
 
                     case 12:
                         console.log('========== START SENDING MESSAGES ' + channel.type);
+                        startTime = new Date().getTime();
                         channel.postMessage({
                             from: 'main',
                             step: 0
                         });
                         console.log('main: message send (0)');
 
-                    case 15:
+                    case 16:
                     case 'end':
                         return _context.stop();
                 }

@@ -32,7 +32,7 @@ const iframeEl = document.getElementById('test-iframe');
 
 document.getElementById('user-agent').innerHTML = navigator.userAgent;
 
-var startTime = new Date().getTime();
+var startTime;
 const options = {};
 console.log('++++++');
 console.log(typeof BroadcastChannel);
@@ -122,6 +122,7 @@ const run = async function () {
         });
     }
     console.log('========== START SENDING MESSAGES ' + channel.type);
+    startTime = new Date().getTime();
     channel.postMessage({
         from: 'main',
         step: 0
