@@ -1,4 +1,4 @@
-declare type MethodType = 'node' | 'idb' | 'native';
+declare type MethodType = 'node' | 'idb' | 'native' | 'localstorage';
 
 export type BroadcastChannelOptions = {
     type?: MethodType,

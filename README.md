@@ -83,9 +83,14 @@ const channel = new BroadcastChannel('foobar', options);
 
 ## What this is
 
-This module is optimised for low latency and height certainity that no message is lost.
+This module is optimised for:
+- **low latency**: When you postMessage on one channel, it should take as low as possible time until other channels recieve the message.
+- **lossless**: When you send a message, it should be impossible that the message is lost before other channels recieved it
+- **low idle workload**: During the time when no messages are send, there should be a low processor footprint.
 
 ## What this is not
 
--   This is not a polyfill. Do not set this module to `window.BroadcastChannel`. This implementation behaves similiar but not equal to the [BroadcastChannel-Standard](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API).
+-   This is not a polyfill. Do not set this module to `window.BroadcastChannel`. This implementation behaves similiar to the [BroadcastChannel-Standard](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API) with these limitations:
+    - You can only send data that can be `JSON.stringify`-ed.
+    - While the offical API emits [onmessage-events](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel/onmessage), this module directly emitts the data which was posted
 -   This is not a replacement for a message queue. If you use this in NodeJs and want send more than 50 messages per second, you should use proper [IPC-Tooling](https://en.wikipedia.org/wiki/Message_queue)
