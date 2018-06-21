@@ -46,13 +46,13 @@ Depending in which environment this is used, a proper method is automatically se
 This API behaves similar to the [javascript-standard](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API).
 
 ```bash
-npm install --save broadcastchannel
+npm install --save broadcast-channel
 ```
 
 Create a channel in one tab/process and send a message.
 
 ```js
-const BroadcastChannel = require('broadcastchannel');
+const BroadcastChannel = require('broadcast-channel');
 const channel = new BroadcastChannel('foobar');
 channel.postMessage('I am not alone');
 ```
@@ -60,7 +60,7 @@ channel.postMessage('I am not alone');
 Create a channel with the same name in another tab/process and recieve messages.
 
 ```js
-const BroadcastChannel = require('broadcastchannel');
+const BroadcastChannel = require('broadcast-channel');
 const channel = new BroadcastChannel('foobar');
 channel.onmessage = msg => console.dir(msg);
 // > 'I am not alone'

@@ -1,5 +1,5 @@
 {
-  "name": "broadcastchannel",
+  "name": "broadcast-channel",
   "version": "0.0.1",
   "description": "A BroadcastChannel implementation that works with new browsers, older browsers and Node.js",
   "keywords": [
