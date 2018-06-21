@@ -82,6 +82,19 @@ const options = {
 const channel = new BroadcastChannel('foobar', options);
 ```
 
+Create a typed channel in typescript:
+
+```typescript
+import BroadcastChannel from 'broadcast-channel';
+declare type Message = {
+  foo: string;
+};
+const channel: BroadcastChannel<Message> = new BroadcastChannel('foobar');
+channel.postMessage({
+  foo: 'bar'
+});
+```
+
 ## What this is
 
 This module is optimised for:
