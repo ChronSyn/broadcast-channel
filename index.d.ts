@@ -17,16 +17,16 @@ export type BroadcastChannelOptions = {
  * api as defined in
  * @link https://html.spec.whatwg.org/multipage/web-messaging.html#broadcasting-to-other-browsing-contexts
  */
-declare class BroadcastChannel {
+declare class BroadcastChannel<T = any> {
     constructor(name: string, opts?: BroadcastChannelOptions);
     readonly name: string;
     readonly options: BroadcastChannelOptions;
     readonly type: MethodType;
 
-    postMessage(msg: any): Promise<void>;
+    postMessage(msg: T): Promise<void>;
     close(): Promise<void>;
 
-    onmessage(fn: (msg: any) => void);
+    onmessage: ((this: BroadcastChannel, ev: T) => any) | null;
 }
 
 export default BroadcastChannel;
