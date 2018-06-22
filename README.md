@@ -22,8 +22,6 @@
 
 * * *
 
-# BroadcastChannel
-
 A BroadcastChannel allows simple communication between browsing contexts with the same origin or different NodeJs processes.
 
 This implementation works with old browsers, new browsers, WebWorkers and NodeJs. You can use it to send messages between multiple browser-tabs, iframes, WebWorkers and NodeJs-processes.
