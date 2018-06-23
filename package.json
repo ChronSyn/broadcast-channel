@@ -2,7 +2,7 @@
   "name": "broadcast-channel",
   "version": "0.0.1",
   "description": "A BroadcastChannel implementation that works with new browsers, older browsers and Node.js",
-  "homepage": "https://pubkey.github.io/broadcast-channel/",
+  "homepage": "https://github.com/pubkey/broadcast-channel#readme",
   "keywords": [
     "broadcast-channel",
     "broadcastchannel",
@@ -23,7 +23,6 @@
   "bugs": {
     "url": "https://github.com/pubkey/broadcast-channel/issues"
   },
-  "homepage": "https://github.com/pubkey/broadcast-channel#readme",
   "main": "./dist/lib/index.js",
   "jsnext:main": "./dist/es/index.js",
   "module": "./dist/es/index.js",
@@ -34,6 +33,7 @@
     "test:browser": "npm run build && karma start ./config/karma.conf.js --single-run",
     "test:e2e": "concurrently \"npm run docs:serve\" \"testcafe all test/e2e.test.js\" --kill-others --success first",
     "test:typings": "npm run build && mocha ./test/typings.test.js -b --timeout 12000 --exit",
+    "test:size": "npm run build && rimraf test_tmp/browserify.js && browserify dist/lib/browserify.index.js > test_tmp/browserify.js && uglifyjs --compress --mangle --output test_tmp/browserify.min.js -- test_tmp/browserify.js && echo \"Build-Size (minified+gzip):\" && gzip-size --raw test_tmp/browserify.min.js",
     "lint": "eslint --ignore-path ./config/.eslintignore src test config scripts",
     "clear": "rimraf -rf ./dist && rimraf -rf ./gen",
     "build:es6": "rimraf -rf dist/es && cross-env NODE_ENV=es6 babel src --out-dir dist/es",
@@ -43,6 +43,7 @@
     "build:worker": "browserify test_tmp/scripts/worker.js > docs/worker.js",
     "build:iframe": "browserify test_tmp/scripts/iframe.js > docs/iframe.js",
     "build": "npm run clear && concurrently \"npm run build:es6\" \"npm run build:es5\" \"npm run build:test\" && concurrently \"npm run build:browser\" \"npm run build:worker\" \"npm run build:iframe\"",
+    "build:min": "uglifyjs --compress --mangle --output dist/lib/browserify.min.js -- dist/lib/browserify.index.js",
     "docs:only": "http-server ./docs",
     "docs:serve": "npm run build && npm run docs:only"
   },
@@ -91,6 +92,7 @@
     "copyfiles": "2.0.0",
     "cross-env": "5.1.6",
     "eslint": "4.19.1",
+    "gzip-size-cli": "^2.1.0",
     "http-server": "0.11.1",
     "karma": "2.0.2",
     "karma-babel-preprocessor": "7.0.0",
