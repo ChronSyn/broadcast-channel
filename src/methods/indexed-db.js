@@ -7,12 +7,12 @@
  */
 
 const isNode = require('detect-node');
-const randomToken = require('random-token');
-const randomInt = require('random-int');
 const IdleQueue = require('custom-idle-queue');
 
 import {
-    sleep
+    sleep,
+    randomInt,
+    randomToken
 } from '../util.js';
 
 import {

@@ -10,24 +10,24 @@ export function isPromise(obj) {
     }
 }
 
-/**
- * windows sucks
- * @link https://gist.github.com/domenic/2790533#gistcomment-331356
- */
-export function cleanPipeName(str) {
-    if (
-        process.platform === 'win32' &&
-        !str.startsWith('\\\\.\\pipe\\')
-    ) {
-        str = str.replace(/^\//, '');
-        str = str.replace(/\//g, '-');
-        return '\\\\.\\pipe\\' + str;
-    } else {
-        return str;
-    }
-};
-
 export function sleep(time) {
     if (!time) time = 0;
     return new Promise(res => setTimeout(res, time));
+}
+
+export function randomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1) + min);
+}
+
+/**
+ * https://stackoverflow.com/a/1349426/3443137
+ */
+export function randomToken(length) {
+    let text = '';
+    const possible = 'abcdefghijklmnopqrstuvwxzy0123456789';
+
+    for (let i = 0; i < 5; i++)
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+
+    return text;
 }

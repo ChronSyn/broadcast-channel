@@ -14,31 +14,16 @@ import {
 module.exports = (() => {
 
 
-    const BroadcastChannel = function (name, options = {}) {
+    const BroadcastChannel = function (name, options) {
         this.name = name;
         this.options = fillOptionsWithDefaults(options);
         this.method = chooseMethod(this.options);
 
         this._preparePromise = null;
-        this._prepare();
+        _prepareChannel(this);
     };
 
     BroadcastChannel.prototype = {
-        _prepare() {
-            const maybePromise = this.method.create(this.name, this.options);
-            if (isPromise(maybePromise)) {
-                this._preparePromise = maybePromise;
-                maybePromise.then(s => {
-                    // used in tests to simulate slow runtime
-                    if (this.options.prepareDelay) {
-                        // await new Promise(res => setTimeout(res, this.options.prepareDelay));
-                    }
-                    this._state = s;
-                });
-            } else {
-                this._state = maybePromise;
-            }
-        },
         postMessage(msg) {
             const msgObj = {
                 time: new Date().getTime(),
@@ -91,6 +76,22 @@ module.exports = (() => {
             return this.method.type;
         }
     };
+
+    function _prepareChannel(channel){
+        const maybePromise = channel.method.create(channel.name, channel.options);
+        if (isPromise(maybePromise)) {
+            channel._preparePromise = maybePromise;
+            maybePromise.then(s => {
+                // used in tests to simulate slow runtime
+                /*if (channel.options.prepareDelay) {
+                     await new Promise(res => setTimeout(res, this.options.prepareDelay));
+                }*/
+                channel._state = s;
+            });
+        } else {
+            channel._state = maybePromise;
+        }
+    }
 
     function messageHandler(fn, minTime) {
         return msgObj => {

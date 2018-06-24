@@ -56,3 +56,8 @@ AFTER (with localstorage ping):
 ====== build-size
 BEFORE: 37251
 AFTER: 4077
+
+
+====== build-size 2
+BEFORE: 4077
+AFTER: 3795

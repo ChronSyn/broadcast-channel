@@ -14,8 +14,6 @@ import {
 } from 'js-sha3';
 
 import isNode from 'detect-node';
-import randomToken from 'random-token';
-import randomInt from 'random-int';
 import IdleQueue from 'custom-idle-queue';
 import unload from 'unload';
 
@@ -24,8 +22,26 @@ import {
 } from '../options';
 
 import {
-    cleanPipeName
+    randomInt,
+    randomToken
 } from '../util';
+
+/**
+ * windows sucks, so we have handle windows-type of socket-paths
+ * @link https://gist.github.com/domenic/2790533#gistcomment-331356
+ */
+export function cleanPipeName(str) {
+    if (
+        process.platform === 'win32' &&
+        !str.startsWith('\\\\.\\pipe\\')
+    ) {
+        str = str.replace(/^\//, '');
+        str = str.replace(/\//g, '-');
+        return '\\\\.\\pipe\\' + str;
+    } else {
+        return str;
+    }
+};
 
 const mkdir = util.promisify(fs.mkdir);
 const writeFile = util.promisify(fs.writeFile);

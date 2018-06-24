@@ -7,14 +7,14 @@
  */
 
 const isNode = require('detect-node');
-const randomToken = require('random-token');
 
 import {
     fillOptionsWithDefaults
 } from '../options';
 
 import {
-    sleep
+    sleep,
+    randomToken
 } from '../util';
 
 const KEY_PREFIX = 'pubkey.broadcastChannel-';
