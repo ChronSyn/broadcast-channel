@@ -49,3 +49,9 @@ AFTER (with localstorage ping):
 3821
 
 => sending localstorage-pings is slower
+
+
+
+
+====== build-size
+BEFORE: 37251

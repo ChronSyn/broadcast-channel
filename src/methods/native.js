@@ -3,7 +3,8 @@ import isNode from 'detect-node';
 
 export const type = 'native';
 
-export function create(channelName, options = {}) {
+export function create(channelName, options) {
+    if(!options) options = {};
     const state = {
         channelName,
         options,

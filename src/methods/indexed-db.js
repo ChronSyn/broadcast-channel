@@ -29,7 +29,7 @@ export function getIdb() {
     return false;
 }
 
-export async function createDatabase(channelName) {
+export function createDatabase(channelName) {
     const IndexedDB = getIdb();
 
     // create table
@@ -43,20 +43,21 @@ export async function createDatabase(channelName) {
             autoIncrement: true
         });
     };
-    const db = await new Promise((res, rej) => {
+    const dbPromise = new Promise((res, rej) => {
         openRequest.onerror = ev => rej(ev);
         openRequest.onsuccess = () => {
             res(openRequest.result);
         };
     });
 
-    return db;
+    return dbPromise;
 }
+
 /**
  * writes the new message to the database
  * so other readers can find it
  */
-export async function writeMessage(db, readerUuid, messageJson) {
+export function writeMessage(db, readerUuid, messageJson) {
     const time = new Date().getTime();
     const writeObject = {
         uuid: readerUuid,
@@ -75,7 +76,7 @@ export async function writeMessage(db, readerUuid, messageJson) {
     });
 }
 
-export async function getAllMessages(db) {
+export function getAllMessages(db) {
     const objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
     const ret = [];
     return new Promise(res => {
@@ -92,7 +93,7 @@ export async function getAllMessages(db) {
     });
 }
 
-export async function getMessagesHigherThen(db, lastCursorId) {
+export function getMessagesHigherThen(db, lastCursorId) {
     const objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
     const ret = [];
     const keyRangeValue = IDBKeyRange.bound(lastCursorId + 1, Infinity);
@@ -110,7 +111,7 @@ export async function getMessagesHigherThen(db, lastCursorId) {
     });
 }
 
-export async function removeMessageById(db, id) {
+export function removeMessageById(db, id) {
     const request = db.transaction([OBJECT_STORE_ID], 'readwrite')
         .objectStore(OBJECT_STORE_ID)
         .delete(id);
@@ -119,7 +120,7 @@ export async function removeMessageById(db, id) {
     });
 }
 
-export async function getOldMessages(db, ttl) {
+export function getOldMessages(db, ttl) {
     const olderThen = new Date().getTime() - ttl;
     const objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
     const ret = [];
@@ -144,14 +145,16 @@ export async function getOldMessages(db, ttl) {
     });
 }
 
-export async function cleanOldMessages(db, ttl) {
-    const tooOld = await getOldMessages(db, ttl);
-    return Promise.all(
-        tooOld.map(msgObj => removeMessageById(db, msgObj.id))
-    );
+export function cleanOldMessages(db, ttl) {
+    return getOldMessages(db, ttl)
+        .then(tooOld => {
+            return Promise.all(
+                tooOld.map(msgObj => removeMessageById(db, msgObj.id))
+            );
+        });
 }
 
-export async function create(channelName, options = {}) {
+export function create(channelName, options) {
     options = fillOptionsWithDefaults(options);
 
     const uuid = randomToken(10);
@@ -159,40 +162,55 @@ export async function create(channelName, options = {}) {
     // ensures we do not read messages in parrallel
     const readQueue = new IdleQueue(1);
 
-    const db = await createDatabase(channelName);
-    const state = {
-        closed: false,
-        lastCursorId: 0,
-        channelName,
-        options,
-        uuid,
-        // contains all messages that have been emitted before
-        emittedMessagesIds: new Set(),
-        messagesCallback: null,
-        readQueue,
-        db
-    };
 
-    /**
-     * if service-workers are used,
-     * we have no 'storage'-event if they post a message,
-     * therefore we also have to set an interval
-     */
-    (async () => {
-        while (state.closed === false) {
-            await handleMessagePing(state);
-            await new Promise(res => setTimeout(res, state.options.idb.fallbackInterval));
-        }
-    })();
+    return createDatabase(channelName).then(db => {
+        const state = {
+            closed: false,
+            lastCursorId: 0,
+            channelName,
+            options,
+            uuid,
+            // contains all messages that have been emitted before
+            emittedMessagesIds: new Set(),
+            messagesCallback: null,
+            readQueue,
+            db
+        };
 
-    return state;
+        /**
+         * if service-workers are used,
+         * we have no 'storage'-event if they post a message,
+         * therefore we also have to set an interval
+         */
+        _readLoop(state);
+
+        return state;
+    });
 }
+
+function _sleep(time) {
+    return new Promise(res => setTimeout(res, time));
+}
+
+
+// TODO write this without async for smaller build-size
+async function _readLoop(state) {
+    console.log('_readLoop()');
+    if (state.closed) return;
+
+
+    await handleMessagePing(state);
+    await _sleep(state.options.idb.fallbackInterval);
+
+    _readLoop(state);
+}
+
 
 /**
  * when the storage-event pings, so that we now new messages came,
  * run this
  */
-export async function handleMessagePing(state) {
+export function handleMessagePing(state) {
     /**
      * when there are no listener, we do nothing
      */
@@ -204,10 +222,15 @@ export async function handleMessagePing(state) {
      */
     if (state.readQueue._idleCalls.size > 1) return;
 
-    await state.readQueue.requestIdlePromise();
-    await state.readQueue.wrapCall(
-        async () => {
-            const newerMessages = await getMessagesHigherThen(state.db, state.lastCursorId);
+    return state.readQueue.requestIdlePromise()
+        .then(() => state.readQueue.wrapCall(
+            () => _handleMessagePingInner(state)
+        ));
+}
+
+function _handleMessagePingInner(state) {
+    return getMessagesHigherThen(state.db, state.lastCursorId)
+        .then(newerMessages => {
             const useMessages = newerMessages
                 .map(msgObj => {
                     if (msgObj.id > state.lastCursorId) {
@@ -231,8 +254,7 @@ export async function handleMessagePing(state) {
                     state.messagesCallback(msgObj.data);
                 }
             }
-        }
-    );
+        });
 }
 
 export function close(channelState) {
@@ -241,19 +263,19 @@ export function close(channelState) {
     channelState.db.close();
 }
 
-export async function postMessage(channelState, messageJson) {
-    await writeMessage(
+export function postMessage(channelState, messageJson) {
+    return writeMessage(
         channelState.db,
         channelState.uuid,
         messageJson
-    );
-
-    if (randomInt(0, 10) === 0) {
-        /* await (do not await) */ cleanOldMessages(
-            channelState.db,
-            channelState.options.idb.ttl
-        );
-    }
+    ).then(() => {
+        if (randomInt(0, 10) === 0) {
+            /* await (do not await) */ cleanOldMessages(
+                channelState.db,
+                channelState.options.idb.ttl
+            );
+        }
+    });
 }
 
 export function onMessage(channelState, fn, time) {

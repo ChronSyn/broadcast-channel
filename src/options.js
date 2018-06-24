@@ -1,6 +1,7 @@
 import clone from 'clone';
 
 export function fillOptionsWithDefaults(options) {
+    if(!options) options = {};
     options = clone(options);
 
     // main

@@ -44,29 +44,33 @@ export function storageKey(channelName) {
 * writes the new message to the storage
 * and fires the storage-event so other readers can find it
 */
-export async function postMessage(channelState, messageJson) {
-    await new Promise(res => setTimeout(res, 0));
+export function postMessage(channelState, messageJson) {
+    return new Promise(res => {
+        setTimeout(() => {
+            const key = storageKey(channelState.channelName);
+            const writeObj = {
+                token: randomToken(10),
+                time: new Date().getTime(),
+                data: messageJson,
+                uuid: channelState.uuid
+            };
+            const value = JSON.stringify(writeObj);
+            localStorage.setItem(key, value);
 
-    const key = storageKey(channelState.channelName);
-    const writeObj = {
-        token: randomToken(10),
-        time: new Date().getTime(),
-        data: messageJson,
-        uuid: channelState.uuid
-    };
-    const value = JSON.stringify(writeObj);
-    localStorage.setItem(key, value);
+            /**
+             * StorageEvent does not fire the 'storage' event
+             * in the window that changes the state of the local storage.
+             * So we fire it manually
+             */
+            const ev = document.createEvent('Event');
+            ev.initEvent('storage', true, true);
+            ev.key = key;
+            ev.newValue = value;
+            window.dispatchEvent(ev);
 
-    /**
-     * StorageEvent does not fire the 'storage' event
-     * in the window that changes the state of the local storage.
-     * So we fire it manually
-     */
-    const ev = document.createEvent('Event');
-    ev.initEvent('storage', true, true);
-    ev.key = key;
-    ev.newValue = value;
-    window.dispatchEvent(ev);
+            res();
+        }, 0);
+    });
 }
 
 export function addStorageEventListener(channelName, fn) {
@@ -83,9 +87,9 @@ export function removeStorageEventListener(listener) {
     window.removeEventListener('storage', listener);
 }
 
-export function create(channelName, options = {}) {
+export function create(channelName, options) {
     options = fillOptionsWithDefaults(options);
-    if(!canBeUsed()){
+    if (!canBeUsed()) {
         throw new Error('BroadcastChannel: localstorage cannot be used');
     }
 
@@ -109,7 +113,7 @@ export function create(channelName, options = {}) {
 
     state.listener = addStorageEventListener(
         channelName,
-        async (msgObj) => {
+        (msgObj) => {
             if (!state.messagesCallback) return; // no listener
             if (msgObj.uuid === uuid) return; // own message
             if (!msgObj.token || emittedMessagesIds.has(msgObj.token)) return; // already emitted
