@@ -61,3 +61,8 @@ AFTER: 4077
 ====== build-size 2
 BEFORE: 4077
 AFTER: 3795
+
+
+====== build-size 3
+BEFORE: 3795
+AFTER: 3110

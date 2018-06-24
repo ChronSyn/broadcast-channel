@@ -2,12 +2,9 @@
  * this method uses indexeddb to store the messages
  * There is currently no observerAPI for idb
  * @link https://github.com/w3c/IndexedDB/issues/51
- * So we use the localstorage 'storage'-event
- * to ping other tabs when a message comes in
  */
 
 const isNode = require('detect-node');
-const IdleQueue = require('custom-idle-queue');
 
 import {
     sleep,
@@ -163,10 +160,6 @@ export function create(channelName, options) {
 
     const uuid = randomToken(10);
 
-    // ensures we do not read messages in parrallel
-    const readQueue = new IdleQueue(1);
-
-
     return createDatabase(channelName).then(db => {
         const state = {
             closed: false,
@@ -177,7 +170,7 @@ export function create(channelName, options) {
             // contains all messages that have been emitted before
             emittedMessagesIds: new Set(),
             messagesCallback: null,
-            readQueue,
+            readQueuePromises: [],
             db
         };
 
@@ -195,35 +188,15 @@ export function create(channelName, options) {
 function _readLoop(state) {
     if (state.closed) return;
 
-    return handleMessagePing(state)
+    return readNewMessages(state)
         .then(() => sleep(state.options.idb.fallbackInterval))
         .then(() => _readLoop(state));
 }
 
-
 /**
- * when the storage-event pings, so that we now new messages came,
- * run this
+ * reads all new messages from the database and emits them
  */
-export function handleMessagePing(state) {
-    /**
-     * when there are no listener, we do nothing
-     */
-    if (!state.messagesCallback) return Promise.resolve();
-
-    /**
-     * if we have 2 or more read-tasks in the queue,
-     * we do not have to set more
-     */
-    if (state.readQueue._idleCalls.size > 1) return Promise.resolve();
-
-    return state.readQueue.requestIdlePromise()
-        .then(() => state.readQueue.wrapCall(
-            () => _handleMessagePingInner(state)
-        ));
-}
-
-function _handleMessagePingInner(state) {
+function readNewMessages(state) {
     return getMessagesHigherThen(state.db, state.lastCursorId)
         .then(newerMessages => {
             const useMessages = newerMessages
@@ -257,7 +230,6 @@ function _handleMessagePingInner(state) {
 
 export function close(channelState) {
     channelState.closed = true;
-    channelState.readQueue.clear();
     channelState.db.close();
 }
 
@@ -279,7 +251,7 @@ export function postMessage(channelState, messageJson) {
 export function onMessage(channelState, fn, time) {
     channelState.messagesCallbackTime = time;
     channelState.messagesCallback = fn;
-    handleMessagePing(channelState);
+    readNewMessages(channelState);
 }
 
 export function canBeUsed() {
