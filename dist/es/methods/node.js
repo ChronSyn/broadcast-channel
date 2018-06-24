@@ -1,10 +1,4 @@
-import _Object$values from 'babel-runtime/core-js/object/values';
-import _Object$keys from 'babel-runtime/core-js/object/keys';
-import _getIterator from 'babel-runtime/core-js/get-iterator';
-import _Set from 'babel-runtime/core-js/set';
-import _JSON$stringify from 'babel-runtime/core-js/json/stringify';
 import _regeneratorRuntime from 'babel-runtime/regenerator';
-import _Promise from 'babel-runtime/core-js/promise';
 import _asyncToGenerator from 'babel-runtime/helpers/asyncToGenerator';
 /**
  * this method is used in nodejs-environments.
@@ -72,7 +66,7 @@ export var ensureFoldersExist = function () {
                         });
 
                     case 5:
-                        _context.t0 = _Promise;
+                        _context.t0 = Promise;
                         _context.next = 8;
                         return mkdir(paths.readers)['catch'](function () {
                             return null;
@@ -135,7 +129,7 @@ export var createSocketInfoFile = function () {
                     case 2:
                         pathToFile = socketInfoPath(channelName, readerUuid);
                         _context2.next = 5;
-                        return writeFile(pathToFile, _JSON$stringify({
+                        return writeFile(pathToFile, JSON.stringify({
                             time: new Date().getTime()
                         }));
 
@@ -180,7 +174,7 @@ export var createSocketEventEmitter = function () {
                             });
                         });
                         _context3.next = 5;
-                        return new _Promise(function (res) {
+                        return new Promise(function (res) {
                             server.listen(pathToSocket, function () {
                                 res();
                             });
@@ -220,7 +214,7 @@ export var openClientConnection = function () {
                         pathToSocket = socketPath(channelName, readerUuid);
                         client = new net.Socket();
                         _context4.next = 4;
-                        return new _Promise(function (res) {
+                        return new Promise(function (res) {
                             client.connect(pathToSocket, res);
                         });
 
@@ -261,7 +255,7 @@ export var writeMessage = function () {
                         fileName = time + '_' + readerUuid + '_' + token + '.json';
                         msgPath = path.join(getPaths(channelName).messages, fileName);
                         _context5.next = 7;
-                        return writeFile(msgPath, _JSON$stringify(writeObject));
+                        return writeFile(msgPath, JSON.stringify(writeObject));
 
                     case 7:
                         return _context5.abrupt('return', {
@@ -432,7 +426,7 @@ export var cleanOldMessages = function () {
                     case 0:
                         olderThen = new Date().getTime() - ttl;
                         _context10.next = 3;
-                        return _Promise.all(messageObjects.filter(function (obj) {
+                        return Promise.all(messageObjects.filter(function (obj) {
                             return obj.time < olderThen;
                         }).map(function (obj) {
                             return unlink(obj.path)['catch'](function () {
@@ -475,7 +469,7 @@ export var create = function () {
                     case 3:
                         uuid = randomToken(10);
                         _context12.next = 6;
-                        return _Promise.all([getReadersUuids(channelName), createSocketEventEmitter(channelName, uuid), createSocketInfoFile(channelName, uuid)]);
+                        return Promise.all([getReadersUuids(channelName), createSocketEventEmitter(channelName, uuid), createSocketInfoFile(channelName, uuid)]);
 
                     case 6:
                         _ref12 = _context12.sent;
@@ -484,7 +478,7 @@ export var create = function () {
                         infoFilePath = _ref12[2];
                         otherReaderClients = {};
                         _context12.next = 13;
-                        return _Promise.all(otherReaderUuids.filter(function (readerUuid) {
+                        return Promise.all(otherReaderUuids.filter(function (readerUuid) {
                             return readerUuid !== uuid;
                         }) // not own
                         .map(function () {
@@ -527,7 +521,7 @@ export var create = function () {
                             socketEE: socketEE,
                             infoFilePath: infoFilePath,
                             // contains all messages that have been emitted before
-                            emittedMessagesIds: new _Set(),
+                            emittedMessagesIds: new Set(),
                             messagesCallbackTime: null,
                             messagesCallback: null,
                             readQueue: readQueue,
@@ -696,7 +690,7 @@ export var handleMessagePing = function () {
                                                     }
                                                 }, _loop, _this2);
                                             });
-                                            _iterator = useMessages, _isArray = Array.isArray(_iterator), _i = 0, _iterator = _isArray ? _iterator : _getIterator(_iterator);
+                                            _iterator = useMessages, _isArray = Array.isArray(_iterator), _i = 0, _iterator = _isArray ? _iterator : _iterator[Symbol.iterator]();
 
                                         case 12:
                                             return _context14.delegateYield(_loop(), 't0', 13);
@@ -753,7 +747,7 @@ export var refreshReaderClients = function () {
 
 
                         // remove subscriptions to closed readers
-                        _Object$keys(channelState.otherReaderClients).filter(function (readerUuid) {
+                        Object.keys(channelState.otherReaderClients).filter(function (readerUuid) {
                             return !otherReaders.includes(readerUuid);
                         }).forEach(function (readerUuid) {
                             channelState.otherReaderClients[readerUuid].close();
@@ -761,7 +755,7 @@ export var refreshReaderClients = function () {
                         });
 
                         _context17.next = 6;
-                        return _Promise.all(otherReaders.filter(function (readerUuid) {
+                        return Promise.all(otherReaders.filter(function (readerUuid) {
                             return readerUuid !== channelState.uuid;
                         }) // not own
                         .filter(function (readerUuid) {
@@ -848,8 +842,8 @@ export var postMessage = function () {
                                                 }
                                             };
                                             _context18.next = 8;
-                                            return _Promise.all(_Object$values(channelState.otherReaderClients).map(function (client) {
-                                                return client.write(_JSON$stringify(pingObj));
+                                            return Promise.all(Object.values(channelState.otherReaderClients).map(function (client) {
+                                                return client.write(JSON.stringify(pingObj));
                                             }));
 
                                         case 8:
@@ -916,7 +910,7 @@ export var close = function () {
 
                     case 7:
 
-                        _Object$values(channelState.otherReaderClients).forEach(function (client) {
+                        Object.values(channelState.otherReaderClients).forEach(function (client) {
                             return client.destroy();
                         });
 

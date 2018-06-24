@@ -1,20 +1,21 @@
-import _JSON$stringify from 'babel-runtime/core-js/json/stringify';
-import isNode from 'detect-node';
+var isNode = require('detect-node');
 
-import * as NativeMethod from './methods/native.js';
-import * as IndexeDbMethod from './methods/indexed-db.js';
-import * as LocalstorageMethod from './methods/localstorage.js';
+var NativeMethod = require('./methods/native.js');
+var IndexeDbMethod = require('./methods/indexed-db.js');
+var LocalstorageMethod = require('./methods/localstorage.js');
 
 // order is important
 var METHODS = [NativeMethod, // fastest
 IndexeDbMethod, LocalstorageMethod];
+
+var REQUIRE_FUN = require;
 
 /**
  * The NodeMethod is loaded lazy
  * so it will not get bundled in browser-builds
  */
 if (isNode) {
-    var NodeMethod = require('./methods/node.js');
+    var NodeMethod = REQUIRE_FUN('./methods/node.js');
     METHODS.push(NodeMethod);
 }
 
@@ -38,7 +39,7 @@ export function chooseMethod(options) {
     var useMethod = chooseMethods.find(function (method) {
         return method.canBeUsed();
     });
-    if (!useMethod) throw new Error('No useable methode found:' + _JSON$stringify(METHODS.map(function (m) {
+    if (!useMethod) throw new Error('No useable methode found:' + JSON.stringify(METHODS.map(function (m) {
         return m.type;
     })));else return useMethod;
 }

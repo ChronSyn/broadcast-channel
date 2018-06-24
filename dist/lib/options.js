@@ -4,15 +4,9 @@ Object.defineProperty(exports, "__esModule", {
     value: true
 });
 exports.fillOptionsWithDefaults = fillOptionsWithDefaults;
-
-var _clone = require('clone');
-
-var _clone2 = _interopRequireDefault(_clone);
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
-
 function fillOptionsWithDefaults(options) {
-    options = (0, _clone2['default'])(options);
+    if (!options) options = {};
+    options = JSON.parse(JSON.stringify(options));
 
     // main
     if (typeof options.webWorkerSupport === 'undefined') options.webWorkerSupport = true;

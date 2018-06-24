@@ -1,8 +1,3 @@
-import _getIterator from 'babel-runtime/core-js/get-iterator';
-import _Set from 'babel-runtime/core-js/set';
-import _regeneratorRuntime from 'babel-runtime/regenerator';
-import _Promise from 'babel-runtime/core-js/promise';
-import _asyncToGenerator from 'babel-runtime/helpers/asyncToGenerator';
 /**
  * this method uses indexeddb to store the messages
  * There is currently no observerAPI for idb
@@ -11,10 +6,12 @@ import _asyncToGenerator from 'babel-runtime/helpers/asyncToGenerator';
  * to ping other tabs when a message comes in
  */
 
-import isNode from 'detect-node';
-import randomToken from 'random-token';
-import randomInt from 'random-int';
-import IdleQueue from 'custom-idle-queue';
+var isNode = require('detect-node');
+var randomToken = require('random-token');
+var randomInt = require('random-int');
+var IdleQueue = require('custom-idle-queue');
+
+import { sleep } from '../util.js';
 
 import { fillOptionsWithDefaults } from '../options';
 
@@ -32,475 +29,237 @@ export function getIdb() {
     return false;
 }
 
-export var createDatabase = function () {
-    var _ref = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee(channelName) {
-        var IndexedDB, dbName, openRequest, db;
-        return _regeneratorRuntime.wrap(function _callee$(_context) {
-            while (1) {
-                switch (_context.prev = _context.next) {
-                    case 0:
-                        IndexedDB = getIdb();
+export function createDatabase(channelName) {
+    var IndexedDB = getIdb();
 
-                        // create table
+    // create table
+    var dbName = DB_PREFIX + channelName;
+    var openRequest = IndexedDB.open(dbName, 1);
 
-                        dbName = DB_PREFIX + channelName;
-                        openRequest = IndexedDB.open(dbName, 1);
-
-
-                        openRequest.onupgradeneeded = function (ev) {
-                            var db = ev.target.result;
-                            db.createObjectStore(OBJECT_STORE_ID, {
-                                keyPath: 'id',
-                                autoIncrement: true
-                            });
-                        };
-                        _context.next = 6;
-                        return new _Promise(function (res, rej) {
-                            openRequest.onerror = function (ev) {
-                                return rej(ev);
-                            };
-                            openRequest.onsuccess = function () {
-                                res(openRequest.result);
-                            };
-                        });
-
-                    case 6:
-                        db = _context.sent;
-                        return _context.abrupt('return', db);
-
-                    case 8:
-                    case 'end':
-                        return _context.stop();
-                }
-            }
-        }, _callee, this);
-    }));
-
-    return function createDatabase(_x) {
-        return _ref.apply(this, arguments);
+    openRequest.onupgradeneeded = function (ev) {
+        var db = ev.target.result;
+        db.createObjectStore(OBJECT_STORE_ID, {
+            keyPath: 'id',
+            autoIncrement: true
+        });
     };
-}();
+    var dbPromise = new Promise(function (res, rej) {
+        openRequest.onerror = function (ev) {
+            return rej(ev);
+        };
+        openRequest.onsuccess = function () {
+            res(openRequest.result);
+        };
+    });
+
+    return dbPromise;
+}
+
 /**
  * writes the new message to the database
  * so other readers can find it
  */
-export var writeMessage = function () {
-    var _ref2 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee2(db, readerUuid, messageJson) {
-        var time, writeObject, transaction;
-        return _regeneratorRuntime.wrap(function _callee2$(_context2) {
-            while (1) {
-                switch (_context2.prev = _context2.next) {
-                    case 0:
-                        time = new Date().getTime();
-                        writeObject = {
-                            uuid: readerUuid,
-                            time: time,
-                            data: messageJson
-                        };
-                        transaction = db.transaction([OBJECT_STORE_ID], 'readwrite');
-                        return _context2.abrupt('return', new _Promise(function (res, rej) {
-                            transaction.oncomplete = function () {
-                                return res();
-                            };
-                            transaction.onerror = function (ev) {
-                                return rej(ev);
-                            };
-
-                            var objectStore = transaction.objectStore(OBJECT_STORE_ID);
-                            objectStore.add(writeObject);
-                        }));
-
-                    case 4:
-                    case 'end':
-                        return _context2.stop();
-                }
-            }
-        }, _callee2, this);
-    }));
-
-    return function writeMessage(_x2, _x3, _x4) {
-        return _ref2.apply(this, arguments);
+export function writeMessage(db, readerUuid, messageJson) {
+    var time = new Date().getTime();
+    var writeObject = {
+        uuid: readerUuid,
+        time: time,
+        data: messageJson
     };
-}();
 
-export var getAllMessages = function () {
-    var _ref3 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee3(db) {
-        var objectStore, ret;
-        return _regeneratorRuntime.wrap(function _callee3$(_context3) {
-            while (1) {
-                switch (_context3.prev = _context3.next) {
-                    case 0:
-                        objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
-                        ret = [];
-                        return _context3.abrupt('return', new _Promise(function (res) {
-                            objectStore.openCursor().onsuccess = function (ev) {
-                                var cursor = ev.target.result;
-                                if (cursor) {
-                                    ret.push(cursor.value);
-                                    //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
-                                    cursor['continue']();
-                                } else {
-                                    res(ret);
-                                }
-                            };
-                        }));
+    var transaction = db.transaction([OBJECT_STORE_ID], 'readwrite');
 
-                    case 3:
-                    case 'end':
-                        return _context3.stop();
-                }
+    return new Promise(function (res, rej) {
+        transaction.oncomplete = function () {
+            return res();
+        };
+        transaction.onerror = function (ev) {
+            return rej(ev);
+        };
+
+        var objectStore = transaction.objectStore(OBJECT_STORE_ID);
+        objectStore.add(writeObject);
+    });
+}
+
+export function getAllMessages(db) {
+    var objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
+    var ret = [];
+    return new Promise(function (res) {
+        objectStore.openCursor().onsuccess = function (ev) {
+            var cursor = ev.target.result;
+            if (cursor) {
+                ret.push(cursor.value);
+                //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
+                cursor['continue']();
+            } else {
+                res(ret);
             }
-        }, _callee3, this);
-    }));
+        };
+    });
+}
 
-    return function getAllMessages(_x5) {
-        return _ref3.apply(this, arguments);
-    };
-}();
-
-export var getMessagesHigherThen = function () {
-    var _ref4 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee4(db, lastCursorId) {
-        var objectStore, ret, keyRangeValue;
-        return _regeneratorRuntime.wrap(function _callee4$(_context4) {
-            while (1) {
-                switch (_context4.prev = _context4.next) {
-                    case 0:
-                        objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
-                        ret = [];
-                        keyRangeValue = IDBKeyRange.bound(lastCursorId + 1, Infinity);
-                        return _context4.abrupt('return', new _Promise(function (res) {
-                            objectStore.openCursor(keyRangeValue).onsuccess = function (ev) {
-                                var cursor = ev.target.result;
-                                if (cursor) {
-                                    ret.push(cursor.value);
-                                    //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
-                                    cursor['continue']();
-                                } else {
-                                    res(ret);
-                                }
-                            };
-                        }));
-
-                    case 4:
-                    case 'end':
-                        return _context4.stop();
-                }
+export function getMessagesHigherThen(db, lastCursorId) {
+    var objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
+    var ret = [];
+    var keyRangeValue = IDBKeyRange.bound(lastCursorId + 1, Infinity);
+    return new Promise(function (res) {
+        objectStore.openCursor(keyRangeValue).onsuccess = function (ev) {
+            var cursor = ev.target.result;
+            if (cursor) {
+                ret.push(cursor.value);
+                //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
+                cursor['continue']();
+            } else {
+                res(ret);
             }
-        }, _callee4, this);
-    }));
+        };
+    });
+}
 
-    return function getMessagesHigherThen(_x6, _x7) {
-        return _ref4.apply(this, arguments);
-    };
-}();
+export function removeMessageById(db, id) {
+    var request = db.transaction([OBJECT_STORE_ID], 'readwrite').objectStore(OBJECT_STORE_ID)['delete'](id);
+    return new Promise(function (res) {
+        request.onsuccess = function () {
+            return res();
+        };
+    });
+}
 
-export var removeMessageById = function () {
-    var _ref5 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee5(db, id) {
-        var request;
-        return _regeneratorRuntime.wrap(function _callee5$(_context5) {
-            while (1) {
-                switch (_context5.prev = _context5.next) {
-                    case 0:
-                        request = db.transaction([OBJECT_STORE_ID], 'readwrite').objectStore(OBJECT_STORE_ID)['delete'](id);
-                        return _context5.abrupt('return', new _Promise(function (res) {
-                            request.onsuccess = function () {
-                                return res();
-                            };
-                        }));
-
-                    case 2:
-                    case 'end':
-                        return _context5.stop();
+export function getOldMessages(db, ttl) {
+    var olderThen = new Date().getTime() - ttl;
+    var objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
+    var ret = [];
+    return new Promise(function (res) {
+        objectStore.openCursor().onsuccess = function (ev) {
+            var cursor = ev.target.result;
+            if (cursor) {
+                var msgObk = cursor.value;
+                if (msgObk.time < olderThen) {
+                    ret.push(msgObk);
+                    //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
+                    cursor['continue']();
+                } else {
+                    // no more old messages,
+                    res(ret);
+                    return;
                 }
+            } else {
+                res(ret);
             }
-        }, _callee5, this);
-    }));
+        };
+    });
+}
 
-    return function removeMessageById(_x8, _x9) {
-        return _ref5.apply(this, arguments);
-    };
-}();
+export function cleanOldMessages(db, ttl) {
+    return getOldMessages(db, ttl).then(function (tooOld) {
+        return Promise.all(tooOld.map(function (msgObj) {
+            return removeMessageById(db, msgObj.id);
+        }));
+    });
+}
 
-export var getOldMessages = function () {
-    var _ref6 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee6(db, ttl) {
-        var olderThen, objectStore, ret;
-        return _regeneratorRuntime.wrap(function _callee6$(_context6) {
-            while (1) {
-                switch (_context6.prev = _context6.next) {
-                    case 0:
-                        olderThen = new Date().getTime() - ttl;
-                        objectStore = db.transaction(OBJECT_STORE_ID).objectStore(OBJECT_STORE_ID);
-                        ret = [];
-                        return _context6.abrupt('return', new _Promise(function (res) {
-                            objectStore.openCursor().onsuccess = function (ev) {
-                                var cursor = ev.target.result;
-                                if (cursor) {
-                                    var msgObk = cursor.value;
-                                    if (msgObk.time < olderThen) {
-                                        ret.push(msgObk);
-                                        //alert("Name for SSN " + cursor.key + " is " + cursor.value.name);
-                                        cursor['continue']();
-                                    } else {
-                                        // no more old messages,
-                                        res(ret);
-                                        return;
-                                    }
-                                } else {
-                                    res(ret);
-                                }
-                            };
-                        }));
+export function create(channelName, options) {
+    options = fillOptionsWithDefaults(options);
 
-                    case 4:
-                    case 'end':
-                        return _context6.stop();
-                }
-            }
-        }, _callee6, this);
-    }));
+    var uuid = randomToken(10);
 
-    return function getOldMessages(_x10, _x11) {
-        return _ref6.apply(this, arguments);
-    };
-}();
+    // ensures we do not read messages in parrallel
+    var readQueue = new IdleQueue(1);
 
-export var cleanOldMessages = function () {
-    var _ref7 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee7(db, ttl) {
-        var tooOld;
-        return _regeneratorRuntime.wrap(function _callee7$(_context7) {
-            while (1) {
-                switch (_context7.prev = _context7.next) {
-                    case 0:
-                        _context7.next = 2;
-                        return getOldMessages(db, ttl);
+    return createDatabase(channelName).then(function (db) {
+        var state = {
+            closed: false,
+            lastCursorId: 0,
+            channelName: channelName,
+            options: options,
+            uuid: uuid,
+            // contains all messages that have been emitted before
+            emittedMessagesIds: new Set(),
+            messagesCallback: null,
+            readQueue: readQueue,
+            db: db
+        };
 
-                    case 2:
-                        tooOld = _context7.sent;
-                        return _context7.abrupt('return', _Promise.all(tooOld.map(function (msgObj) {
-                            return removeMessageById(db, msgObj.id);
-                        })));
+        /**
+         * if service-workers are used,
+         * we have no 'storage'-event if they post a message,
+         * therefore we also have to set an interval
+         */
+        _readLoop(state);
 
-                    case 4:
-                    case 'end':
-                        return _context7.stop();
-                }
-            }
-        }, _callee7, this);
-    }));
+        return state;
+    });
+}
 
-    return function cleanOldMessages(_x12, _x13) {
-        return _ref7.apply(this, arguments);
-    };
-}();
+function _readLoop(state) {
+    if (state.closed) return;
 
-export var create = function () {
-    var _ref8 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee9(channelName) {
-        var _this = this;
-
-        var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
-        var uuid, readQueue, db, state;
-        return _regeneratorRuntime.wrap(function _callee9$(_context9) {
-            while (1) {
-                switch (_context9.prev = _context9.next) {
-                    case 0:
-                        options = fillOptionsWithDefaults(options);
-
-                        uuid = randomToken(10);
-
-                        // ensures we do not read messages in parrallel
-
-                        readQueue = new IdleQueue(1);
-                        _context9.next = 5;
-                        return createDatabase(channelName);
-
-                    case 5:
-                        db = _context9.sent;
-                        state = {
-                            closed: false,
-                            lastCursorId: 0,
-                            channelName: channelName,
-                            options: options,
-                            uuid: uuid,
-                            // contains all messages that have been emitted before
-                            emittedMessagesIds: new _Set(),
-                            messagesCallback: null,
-                            readQueue: readQueue,
-                            db: db
-                        };
-
-                        /**
-                         * if service-workers are used,
-                         * we have no 'storage'-event if they post a message,
-                         * therefore we also have to set an interval
-                         */
-
-                        _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee8() {
-                            return _regeneratorRuntime.wrap(function _callee8$(_context8) {
-                                while (1) {
-                                    switch (_context8.prev = _context8.next) {
-                                        case 0:
-                                            if (!(state.closed === false)) {
-                                                _context8.next = 7;
-                                                break;
-                                            }
-
-                                            _context8.next = 3;
-                                            return handleMessagePing(state);
-
-                                        case 3:
-                                            _context8.next = 5;
-                                            return new _Promise(function (res) {
-                                                return setTimeout(res, state.options.idb.fallbackInterval);
-                                            });
-
-                                        case 5:
-                                            _context8.next = 0;
-                                            break;
-
-                                        case 7:
-                                        case 'end':
-                                            return _context8.stop();
-                                    }
-                                }
-                            }, _callee8, _this);
-                        }))();
-
-                        return _context9.abrupt('return', state);
-
-                    case 9:
-                    case 'end':
-                        return _context9.stop();
-                }
-            }
-        }, _callee9, this);
-    }));
-
-    return function create(_x14) {
-        return _ref8.apply(this, arguments);
-    };
-}();
+    return handleMessagePing(state).then(function () {
+        return sleep(state.options.idb.fallbackInterval);
+    }).then(function () {
+        return _readLoop(state);
+    });
+}
 
 /**
  * when the storage-event pings, so that we now new messages came,
  * run this
  */
-export var handleMessagePing = function () {
-    var _ref10 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee11(state) {
-        var _this2 = this;
+export function handleMessagePing(state) {
+    /**
+     * when there are no listener, we do nothing
+     */
+    if (!state.messagesCallback) return Promise.resolve();
 
-        return _regeneratorRuntime.wrap(function _callee11$(_context11) {
-            while (1) {
-                switch (_context11.prev = _context11.next) {
-                    case 0:
-                        if (state.messagesCallback) {
-                            _context11.next = 2;
-                            break;
-                        }
+    /**
+     * if we have 2 or more read-tasks in the queue,
+     * we do not have to set more
+     */
+    if (state.readQueue._idleCalls.size > 1) return Promise.resolve();
 
-                        return _context11.abrupt('return');
+    return state.readQueue.requestIdlePromise().then(function () {
+        return state.readQueue.wrapCall(function () {
+            return _handleMessagePingInner(state);
+        });
+    });
+}
 
-                    case 2:
-                        if (!(state.readQueue._idleCalls.size > 1)) {
-                            _context11.next = 4;
-                            break;
-                        }
-
-                        return _context11.abrupt('return');
-
-                    case 4:
-                        _context11.next = 6;
-                        return state.readQueue.requestIdlePromise();
-
-                    case 6:
-                        _context11.next = 8;
-                        return state.readQueue.wrapCall(_asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee10() {
-                            var newerMessages, useMessages, _loop, _iterator, _isArray, _i, _ref12, _ret;
-
-                            return _regeneratorRuntime.wrap(function _callee10$(_context10) {
-                                while (1) {
-                                    switch (_context10.prev = _context10.next) {
-                                        case 0:
-                                            _context10.next = 2;
-                                            return getMessagesHigherThen(state.db, state.lastCursorId);
-
-                                        case 2:
-                                            newerMessages = _context10.sent;
-                                            useMessages = newerMessages.map(function (msgObj) {
-                                                if (msgObj.id > state.lastCursorId) {
-                                                    state.lastCursorId = msgObj.id;
-                                                }
-                                                return msgObj;
-                                            }).filter(function (msgObj) {
-                                                return msgObj.uuid !== state.uuid;
-                                            }) // not send by own
-                                            .filter(function (msgObj) {
-                                                return !state.emittedMessagesIds.has(msgObj.id);
-                                            }) // not already emitted
-                                            .filter(function (msgObj) {
-                                                return msgObj.time >= state.messagesCallbackTime;
-                                            }) // not older then onMessageCallback
-                                            .sort(function (msgObjA, msgObjB) {
-                                                return msgObjA.time - msgObjB.time;
-                                            }); // sort by time
-
-                                            _loop = function _loop() {
-                                                if (_isArray) {
-                                                    if (_i >= _iterator.length) return 'break';
-                                                    _ref12 = _iterator[_i++];
-                                                } else {
-                                                    _i = _iterator.next();
-                                                    if (_i.done) return 'break';
-                                                    _ref12 = _i.value;
-                                                }
-
-                                                var msgObj = _ref12;
-
-                                                if (state.messagesCallback) {
-                                                    state.emittedMessagesIds.add(msgObj.id);
-                                                    setTimeout(function () {
-                                                        return state.emittedMessagesIds['delete'](msgObj.id);
-                                                    }, state.options.idb.ttl * 2);
-
-                                                    state.messagesCallback(msgObj.data);
-                                                }
-                                            };
-
-                                            _iterator = useMessages, _isArray = Array.isArray(_iterator), _i = 0, _iterator = _isArray ? _iterator : _getIterator(_iterator);
-
-                                        case 6:
-                                            _ret = _loop();
-
-                                            if (!(_ret === 'break')) {
-                                                _context10.next = 9;
-                                                break;
-                                            }
-
-                                            return _context10.abrupt('break', 11);
-
-                                        case 9:
-                                            _context10.next = 6;
-                                            break;
-
-                                        case 11:
-                                        case 'end':
-                                            return _context10.stop();
-                                    }
-                                }
-                            }, _callee10, _this2);
-                        })));
-
-                    case 8:
-                    case 'end':
-                        return _context11.stop();
-                }
+function _handleMessagePingInner(state) {
+    return getMessagesHigherThen(state.db, state.lastCursorId).then(function (newerMessages) {
+        var useMessages = newerMessages.map(function (msgObj) {
+            if (msgObj.id > state.lastCursorId) {
+                state.lastCursorId = msgObj.id;
             }
-        }, _callee11, this);
-    }));
+            return msgObj;
+        }).filter(function (msgObj) {
+            return msgObj.uuid !== state.uuid;
+        }) // not send by own
+        .filter(function (msgObj) {
+            return !state.emittedMessagesIds.has(msgObj.id);
+        }) // not already emitted
+        .filter(function (msgObj) {
+            return msgObj.time >= state.messagesCallbackTime;
+        }) // not older then onMessageCallback
+        .sort(function (msgObjA, msgObjB) {
+            return msgObjA.time - msgObjB.time;
+        }); // sort by time
 
-    return function handleMessagePing(_x16) {
-        return _ref10.apply(this, arguments);
-    };
-}();
+
+        useMessages.forEach(function (msgObj) {
+            if (state.messagesCallback) {
+                state.emittedMessagesIds.add(msgObj.id);
+                setTimeout(function () {
+                    return state.emittedMessagesIds['delete'](msgObj.id);
+                }, state.options.idb.ttl * 2);
+
+                state.messagesCallback(msgObj.data);
+            }
+        });
+
+        return Promise.resolve();
+    });
+}
 
 export function close(channelState) {
     channelState.closed = true;
@@ -508,33 +267,13 @@ export function close(channelState) {
     channelState.db.close();
 }
 
-export var postMessage = function () {
-    var _ref13 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime.mark(function _callee12(channelState, messageJson) {
-        return _regeneratorRuntime.wrap(function _callee12$(_context12) {
-            while (1) {
-                switch (_context12.prev = _context12.next) {
-                    case 0:
-                        _context12.next = 2;
-                        return writeMessage(channelState.db, channelState.uuid, messageJson);
-
-                    case 2:
-
-                        if (randomInt(0, 10) === 0) {
-                            /* await (do not await) */cleanOldMessages(channelState.db, channelState.options.idb.ttl);
-                        }
-
-                    case 3:
-                    case 'end':
-                        return _context12.stop();
-                }
-            }
-        }, _callee12, this);
-    }));
-
-    return function postMessage(_x17, _x18) {
-        return _ref13.apply(this, arguments);
-    };
-}();
+export function postMessage(channelState, messageJson) {
+    return writeMessage(channelState.db, channelState.uuid, messageJson).then(function () {
+        if (randomInt(0, 10) === 0) {
+            /* await (do not await) */cleanOldMessages(channelState.db, channelState.options.idb.ttl);
+        }
+    });
+}
 
 export function onMessage(channelState, fn, time) {
     channelState.messagesCallbackTime = time;

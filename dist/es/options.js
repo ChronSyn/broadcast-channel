@@ -1,7 +1,6 @@
-import clone from 'clone';
-
 export function fillOptionsWithDefaults(options) {
-    options = clone(options);
+    if (!options) options = {};
+    options = JSON.parse(JSON.stringify(options));
 
     // main
     if (typeof options.webWorkerSupport === 'undefined') options.webWorkerSupport = true;

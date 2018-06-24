@@ -1,10 +1,9 @@
-import isNode from 'detect-node';
+var isNode = require('detect-node');
 
 export var type = 'native';
 
-export function create(channelName) {
-    var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
-
+export function create(channelName, options) {
+    if (!options) options = {};
     var state = {
         channelName: channelName,
         options: options,

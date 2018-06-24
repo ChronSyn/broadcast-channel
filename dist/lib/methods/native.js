@@ -3,24 +3,17 @@
 Object.defineProperty(exports, "__esModule", {
     value: true
 });
-exports.type = undefined;
 exports.create = create;
 exports.close = close;
 exports.postMessage = postMessage;
 exports.onMessage = onMessage;
 exports.canBeUsed = canBeUsed;
-
-var _detectNode = require('detect-node');
-
-var _detectNode2 = _interopRequireDefault(_detectNode);
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+var isNode = require('detect-node');
 
 var type = exports.type = 'native';
 
-function create(channelName) {
-    var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
-
+function create(channelName, options) {
+    if (!options) options = {};
     var state = {
         channelName: channelName,
         options: options,
@@ -53,7 +46,7 @@ function onMessage(channelState, fn, time) {
 }
 
 function canBeUsed() {
-    if (_detectNode2['default']) return false;
+    if (isNode) return false;
 
     if (typeof BroadcastChannel === 'function') return true;
 };

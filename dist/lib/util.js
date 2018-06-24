@@ -5,6 +5,7 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.isPromise = isPromise;
 exports.cleanPipeName = cleanPipeName;
+exports.sleep = sleep;
 /**
  * returns true if the given object is a promise
  */
@@ -29,3 +30,10 @@ function cleanPipeName(str) {
         return str;
     }
 };
+
+function sleep(time) {
+    if (!time) time = 0;
+    return new Promise(function (res) {
+        return setTimeout(res, time);
+    });
+}
