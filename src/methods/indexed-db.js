@@ -6,10 +6,10 @@
  * to ping other tabs when a message comes in
  */
 
-import isNode from 'detect-node';
-import randomToken from 'random-token';
-import randomInt from 'random-int';
-import IdleQueue from 'custom-idle-queue';
+const isNode = require('detect-node');
+const randomToken = require('random-token');
+const randomInt = require('random-int');
+const IdleQueue = require('custom-idle-queue');
 
 import {
     sleep
@@ -238,7 +238,8 @@ function _handleMessagePingInner(state) {
                 .filter(msgObj => msgObj.time >= state.messagesCallbackTime) // not older then onMessageCallback
                 .sort((msgObjA, msgObjB) => msgObjA.time - msgObjB.time); // sort by time
 
-            for (const msgObj of useMessages) {
+
+            useMessages.forEach(msgObj => {
                 if (state.messagesCallback) {
                     state.emittedMessagesIds.add(msgObj.id);
                     setTimeout(
@@ -248,7 +249,7 @@ function _handleMessagePingInner(state) {
 
                     state.messagesCallback(msgObj.data);
                 }
-            }
+            });
 
             return Promise.resolve();
         });

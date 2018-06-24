@@ -1,8 +1,6 @@
-const clone = require('clone');
-
 export function fillOptionsWithDefaults(options) {
     if(!options) options = {};
-    options = clone(options);
+    options = JSON.parse(JSON.stringify(options));
 
     // main
     if (typeof options.webWorkerSupport === 'undefined') options.webWorkerSupport = true;
