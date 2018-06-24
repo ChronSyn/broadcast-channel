@@ -8,7 +8,6 @@
 
 const isNode = require('detect-node');
 const randomToken = require('random-token');
-const IdleQueue = require('custom-idle-queue');
 
 import {
     fillOptionsWithDefaults
@@ -103,15 +102,12 @@ export function create(channelName, options) {
     // contains all messages that have been emitted before
     const emittedMessagesIds = new Set();
 
-    const writeQueue = new IdleQueue(1);
-
     const state = {
         startTime,
         channelName,
         options,
         uuid,
-        emittedMessagesIds,
-        writeQueue
+        emittedMessagesIds
     };
 
 
@@ -138,7 +134,6 @@ export function create(channelName, options) {
 
 export function close(channelState) {
     removeStorageEventListener(channelState.listener);
-    channelState.writeQueue.clear();
 }
 
 export function onMessage(channelState, fn, time) {

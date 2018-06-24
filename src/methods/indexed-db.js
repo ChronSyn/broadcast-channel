@@ -192,17 +192,12 @@ export function create(channelName, options) {
     });
 }
 
-
-// TODO write this without async for smaller build-size
-async function _readLoop(state) {
-    console.log('_readLoop()');
+function _readLoop(state) {
     if (state.closed) return;
 
-
-    await handleMessagePing(state);
-    await sleep(state.options.idb.fallbackInterval);
-
-    _readLoop(state);
+    return handleMessagePing(state)
+        .then(() => sleep(state.options.idb.fallbackInterval))
+        .then(() => _readLoop(state));
 }
 
 
@@ -214,13 +209,13 @@ export function handleMessagePing(state) {
     /**
      * when there are no listener, we do nothing
      */
-    if (!state.messagesCallback) return;
+    if (!state.messagesCallback) return Promise.resolve();
 
     /**
      * if we have 2 or more read-tasks in the queue,
      * we do not have to set more
      */
-    if (state.readQueue._idleCalls.size > 1) return;
+    if (state.readQueue._idleCalls.size > 1) return Promise.resolve();
 
     return state.readQueue.requestIdlePromise()
         .then(() => state.readQueue.wrapCall(
@@ -254,6 +249,8 @@ function _handleMessagePingInner(state) {
                     state.messagesCallback(msgObj.data);
                 }
             }
+
+            return Promise.resolve();
         });
 }
 
