@@ -1,8 +1,8 @@
-import isNode from 'detect-node';
+const isNode = require('detect-node');
 
-import * as NativeMethod from './methods/native.js';
-import * as IndexeDbMethod from './methods/indexed-db.js';
-import * as LocalstorageMethod from './methods/localstorage.js';
+const NativeMethod = require('./methods/native.js');
+const IndexeDbMethod = require('./methods/indexed-db.js');
+const LocalstorageMethod = require('./methods/localstorage.js');
 
 // order is important
 let METHODS = [

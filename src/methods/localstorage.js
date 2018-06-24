@@ -6,13 +6,17 @@
  * @link https://caniuse.com/#feat=indexeddb
  */
 
-import isNode from 'detect-node';
-import randomToken from 'random-token';
-import IdleQueue from 'custom-idle-queue';
+const isNode = require('detect-node');
+const randomToken = require('random-token');
+const IdleQueue = require('custom-idle-queue');
 
 import {
     fillOptionsWithDefaults
 } from '../options';
+
+import {
+    sleep
+} from '../util';
 
 const KEY_PREFIX = 'pubkey.broadcastChannel-';
 export const type = 'localstorage';
@@ -46,7 +50,7 @@ export function storageKey(channelName) {
 */
 export function postMessage(channelState, messageJson) {
     return new Promise(res => {
-        setTimeout(() => {
+        sleep().then(() => {
             const key = storageKey(channelState.channelName);
             const writeObj = {
                 token: randomToken(10),
@@ -69,7 +73,7 @@ export function postMessage(channelState, messageJson) {
             window.dispatchEvent(ev);
 
             res();
-        }, 0);
+        });
     });
 }
 

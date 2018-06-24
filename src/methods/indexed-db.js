@@ -12,6 +12,10 @@ import randomInt from 'random-int';
 import IdleQueue from 'custom-idle-queue';
 
 import {
+    sleep
+} from '../util.js';
+
+import {
     fillOptionsWithDefaults
 } from '../options';
 
@@ -188,10 +192,6 @@ export function create(channelName, options) {
     });
 }
 
-function _sleep(time) {
-    return new Promise(res => setTimeout(res, time));
-}
-
 
 // TODO write this without async for smaller build-size
 async function _readLoop(state) {
@@ -200,7 +200,7 @@ async function _readLoop(state) {
 
 
     await handleMessagePing(state);
-    await _sleep(state.options.idb.fallbackInterval);
+    await sleep(state.options.idb.fallbackInterval);
 
     _readLoop(state);
 }

@@ -1,4 +1,4 @@
-import clone from 'clone';
+const clone = require('clone');
 
 export function fillOptionsWithDefaults(options) {
     if(!options) options = {};

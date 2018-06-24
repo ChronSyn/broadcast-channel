@@ -26,3 +26,8 @@ export function cleanPipeName(str) {
         return str;
     }
 };
+
+export function sleep(time) {
+    if (!time) time = 0;
+    return new Promise(res => setTimeout(res, time));
+}

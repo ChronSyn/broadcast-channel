@@ -1,5 +1,4 @@
-import isNode from 'detect-node';
-
+const isNode = require('detect-node');
 
 export const type = 'native';
 
