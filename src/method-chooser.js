@@ -11,12 +11,14 @@ let METHODS = [
     LocalstorageMethod
 ];
 
+const REQUIRE_FUN = require;
+
 /**
  * The NodeMethod is loaded lazy
  * so it will not get bundled in browser-builds
  */
 if (isNode) {
-    const NodeMethod = require('./methods/node.js');
+    const NodeMethod = REQUIRE_FUN('./methods/node.js');
     METHODS.push(NodeMethod);
 }
 
