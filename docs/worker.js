@@ -9,37 +9,18 @@ var _options = require('./options.js');
 
 module.exports = function () {
 
-    var BroadcastChannel = function BroadcastChannel(name) {
-        var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
-
+    var BroadcastChannel = function BroadcastChannel(name, options) {
         this.name = name;
         this.options = (0, _options.fillOptionsWithDefaults)(options);
         this.method = (0, _methodChooser.chooseMethod)(this.options);
 
         this._preparePromise = null;
-        this._prepare();
+        _prepareChannel(this);
     };
 
     BroadcastChannel.prototype = {
-        _prepare: function _prepare() {
-            var _this = this;
-
-            var maybePromise = this.method.create(this.name, this.options);
-            if ((0, _util.isPromise)(maybePromise)) {
-                this._preparePromise = maybePromise;
-                maybePromise.then(function (s) {
-                    // used in tests to simulate slow runtime
-                    if (_this.options.prepareDelay) {
-                        // await new Promise(res => setTimeout(res, this.options.prepareDelay));
-                    }
-                    _this._state = s;
-                });
-            } else {
-                this._state = maybePromise;
-            }
-        },
         postMessage: function postMessage(msg) {
-            var _this2 = this;
+            var _this = this;
 
             var msgObj = {
                 time: new Date().getTime(),
@@ -52,29 +33,29 @@ module.exports = function () {
 
             var awaitPrepare = this._preparePromise ? this._preparePromise : Promise.resolve();
             return awaitPrepare.then(function () {
-                return _this2.method.postMessage(_this2._state, msgObj);
+                return _this.method.postMessage(_this._state, msgObj);
             });
         },
 
         set onmessage(fn) {
-            var _this3 = this;
+            var _this2 = this;
 
             var time = new Date().getTime() - 5;
             if (this._preparePromise) {
                 this._preparePromise.then(function () {
-                    _this3.method.onMessage(_this3._state, messageHandler(fn, time), time);
+                    _this2.method.onMessage(_this2._state, messageHandler(fn, time), time);
                 });
             } else {
                 this.method.onMessage(this._state, messageHandler(fn, time), time);
             }
         },
         close: function close() {
-            var _this4 = this;
+            var _this3 = this;
 
             this.closed = true;
             var awaitPrepare = this._preparePromise ? this._preparePromise : Promise.resolve();
             return awaitPrepare.then(function () {
-                return _this4.method.close(_this4._state);
+                return _this3.method.close(_this3._state);
             });
         },
 
@@ -82,6 +63,22 @@ module.exports = function () {
             return this.method.type;
         }
     };
+
+    function _prepareChannel(channel) {
+        var maybePromise = channel.method.create(channel.name, channel.options);
+        if ((0, _util.isPromise)(maybePromise)) {
+            channel._preparePromise = maybePromise;
+            maybePromise.then(function (s) {
+                // used in tests to simulate slow runtime
+                /*if (channel.options.prepareDelay) {
+                     await new Promise(res => setTimeout(res, this.options.prepareDelay));
+                }*/
+                channel._state = s;
+            });
+        } else {
+            channel._state = maybePromise;
+        }
+    }
 
     function messageHandler(fn, minTime) {
         return function (msgObj) {
@@ -145,7 +142,7 @@ function chooseMethod(options) {
         return m.type;
     })));else return useMethod;
 }
-},{"./methods/indexed-db.js":3,"./methods/localstorage.js":4,"./methods/native.js":5,"detect-node":335}],3:[function(require,module,exports){
+},{"./methods/indexed-db.js":3,"./methods/localstorage.js":4,"./methods/native.js":5,"detect-node":334}],3:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -161,7 +158,6 @@ exports.removeMessageById = removeMessageById;
 exports.getOldMessages = getOldMessages;
 exports.cleanOldMessages = cleanOldMessages;
 exports.create = create;
-exports.handleMessagePing = handleMessagePing;
 exports.close = close;
 exports.postMessage = postMessage;
 exports.onMessage = onMessage;
@@ -175,14 +171,9 @@ var _options = require('../options');
  * this method uses indexeddb to store the messages
  * There is currently no observerAPI for idb
  * @link https://github.com/w3c/IndexedDB/issues/51
- * So we use the localstorage 'storage'-event
- * to ping other tabs when a message comes in
  */
 
 var isNode = require('detect-node');
-var randomToken = require('random-token');
-var randomInt = require('random-int');
-var IdleQueue = require('custom-idle-queue');
 
 var DB_PREFIX = 'pubkey.broadcast-channel-0-';
 var OBJECT_STORE_ID = 'messages';
@@ -331,10 +322,7 @@ function cleanOldMessages(db, ttl) {
 function create(channelName, options) {
     options = (0, _options.fillOptionsWithDefaults)(options);
 
-    var uuid = randomToken(10);
-
-    // ensures we do not read messages in parrallel
-    var readQueue = new IdleQueue(1);
+    var uuid = (0, _util.randomToken)(10);
 
     return createDatabase(channelName).then(function (db) {
         var state = {
@@ -346,7 +334,7 @@ function create(channelName, options) {
             // contains all messages that have been emitted before
             emittedMessagesIds: new Set(),
             messagesCallback: null,
-            readQueue: readQueue,
+            readQueuePromises: [],
             db: db
         };
 
@@ -364,7 +352,7 @@ function create(channelName, options) {
 function _readLoop(state) {
     if (state.closed) return;
 
-    return handleMessagePing(state).then(function () {
+    return readNewMessages(state).then(function () {
         return (0, _util.sleep)(state.options.idb.fallbackInterval);
     }).then(function () {
         return _readLoop(state);
@@ -372,29 +360,9 @@ function _readLoop(state) {
 }
 
 /**
- * when the storage-event pings, so that we now new messages came,
- * run this
+ * reads all new messages from the database and emits them
  */
-function handleMessagePing(state) {
-    /**
-     * when there are no listener, we do nothing
-     */
-    if (!state.messagesCallback) return Promise.resolve();
-
-    /**
-     * if we have 2 or more read-tasks in the queue,
-     * we do not have to set more
-     */
-    if (state.readQueue._idleCalls.size > 1) return Promise.resolve();
-
-    return state.readQueue.requestIdlePromise().then(function () {
-        return state.readQueue.wrapCall(function () {
-            return _handleMessagePingInner(state);
-        });
-    });
-}
-
-function _handleMessagePingInner(state) {
+function readNewMessages(state) {
     return getMessagesHigherThen(state.db, state.lastCursorId).then(function (newerMessages) {
         var useMessages = newerMessages.map(function (msgObj) {
             if (msgObj.id > state.lastCursorId) {
@@ -432,13 +400,12 @@ function _handleMessagePingInner(state) {
 
 function close(channelState) {
     channelState.closed = true;
-    channelState.readQueue.clear();
     channelState.db.close();
 }
 
 function postMessage(channelState, messageJson) {
     return writeMessage(channelState.db, channelState.uuid, messageJson).then(function () {
-        if (randomInt(0, 10) === 0) {
+        if ((0, _util.randomInt)(0, 10) === 0) {
             /* await (do not await) */cleanOldMessages(channelState.db, channelState.options.idb.ttl);
         }
     });
@@ -447,7 +414,7 @@ function postMessage(channelState, messageJson) {
 function onMessage(channelState, fn, time) {
     channelState.messagesCallbackTime = time;
     channelState.messagesCallback = fn;
-    handleMessagePing(channelState);
+    readNewMessages(channelState);
 }
 
 function canBeUsed() {
@@ -457,7 +424,7 @@ function canBeUsed() {
     if (!idb) return false;
     return true;
 };
-},{"../options":6,"../util.js":7,"custom-idle-queue":334,"detect-node":335,"random-int":337,"random-token":338}],4:[function(require,module,exports){
+},{"../options":6,"../util.js":7,"detect-node":334}],4:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -487,7 +454,6 @@ var _util = require('../util');
  */
 
 var isNode = require('detect-node');
-var randomToken = require('random-token');
 
 var KEY_PREFIX = 'pubkey.broadcastChannel-';
 var type = exports.type = 'localstorage';
@@ -523,7 +489,7 @@ function postMessage(channelState, messageJson) {
         (0, _util.sleep)().then(function () {
             var key = storageKey(channelState.channelName);
             var writeObj = {
-                token: randomToken(10),
+                token: (0, _util.randomToken)(10),
                 time: new Date().getTime(),
                 data: messageJson,
                 uuid: channelState.uuid
@@ -568,7 +534,7 @@ function create(channelName, options) {
     }
 
     var startTime = new Date().getTime();
-    var uuid = randomToken(10);
+    var uuid = (0, _util.randomToken)(10);
 
     // contains all messages that have been emitted before
     var emittedMessagesIds = new Set();
@@ -613,7 +579,7 @@ function canBeUsed() {
     if (!ls) return false;
     return true;
 };
-},{"../options":6,"../util":7,"detect-node":335,"random-token":338}],5:[function(require,module,exports){
+},{"../options":6,"../util":7,"detect-node":334}],5:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -666,7 +632,7 @@ function canBeUsed() {
 
     if (typeof BroadcastChannel === 'function') return true;
 };
-},{"detect-node":335}],6:[function(require,module,exports){
+},{"detect-node":334}],6:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -697,15 +663,15 @@ function fillOptionsWithDefaults(options) {
     return options;
 }
 },{}],7:[function(require,module,exports){
-(function (process){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
     value: true
 });
 exports.isPromise = isPromise;
-exports.cleanPipeName = cleanPipeName;
 exports.sleep = sleep;
+exports.randomInt = randomInt;
+exports.randomToken = randomToken;
 /**
  * returns true if the given object is a promise
  */
@@ -717,28 +683,29 @@ function isPromise(obj) {
     }
 }
 
-/**
- * windows sucks
- * @link https://gist.github.com/domenic/2790533#gistcomment-331356
- */
-function cleanPipeName(str) {
-    if (process.platform === 'win32' && !str.startsWith('\\\\.\\pipe\\')) {
-        str = str.replace(/^\//, '');
-        str = str.replace(/\//g, '-');
-        return '\\\\.\\pipe\\' + str;
-    } else {
-        return str;
-    }
-};
-
 function sleep(time) {
     if (!time) time = 0;
     return new Promise(function (res) {
         return setTimeout(res, time);
     });
 }
-}).call(this,require('_process'))
-},{"_process":336}],8:[function(require,module,exports){
+
+function randomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1) + min);
+}
+
+/**
+ * https://stackoverflow.com/a/1349426/3443137
+ */
+function randomToken(length) {
+    var text = '';
+    var possible = 'abcdefghijklmnopqrstuvwxzy0123456789';
+
+    for (var i = 0; i < 5; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }return text;
+}
+},{}],8:[function(require,module,exports){
 (function (global){
 "use strict";
 
@@ -8288,298 +8255,6 @@ require('./modules/web.dom.iterable');
 module.exports = require('./modules/_core');
 
 },{"./modules/_core":31,"./modules/es6.array.copy-within":137,"./modules/es6.array.every":138,"./modules/es6.array.fill":139,"./modules/es6.array.filter":140,"./modules/es6.array.find":142,"./modules/es6.array.find-index":141,"./modules/es6.array.for-each":143,"./modules/es6.array.from":144,"./modules/es6.array.index-of":145,"./modules/es6.array.is-array":146,"./modules/es6.array.iterator":147,"./modules/es6.array.join":148,"./modules/es6.array.last-index-of":149,"./modules/es6.array.map":150,"./modules/es6.array.of":151,"./modules/es6.array.reduce":153,"./modules/es6.array.reduce-right":152,"./modules/es6.array.slice":154,"./modules/es6.array.some":155,"./modules/es6.array.sort":156,"./modules/es6.array.species":157,"./modules/es6.date.now":158,"./modules/es6.date.to-iso-string":159,"./modules/es6.date.to-json":160,"./modules/es6.date.to-primitive":161,"./modules/es6.date.to-string":162,"./modules/es6.function.bind":163,"./modules/es6.function.has-instance":164,"./modules/es6.function.name":165,"./modules/es6.map":166,"./modules/es6.math.acosh":167,"./modules/es6.math.asinh":168,"./modules/es6.math.atanh":169,"./modules/es6.math.cbrt":170,"./modules/es6.math.clz32":171,"./modules/es6.math.cosh":172,"./modules/es6.math.expm1":173,"./modules/es6.math.fround":174,"./modules/es6.math.hypot":175,"./modules/es6.math.imul":176,"./modules/es6.math.log10":177,"./modules/es6.math.log1p":178,"./modules/es6.math.log2":179,"./modules/es6.math.sign":180,"./modules/es6.math.sinh":181,"./modules/es6.math.tanh":182,"./modules/es6.math.trunc":183,"./modules/es6.number.constructor":184,"./modules/es6.number.epsilon":185,"./modules/es6.number.is-finite":186,"./modules/es6.number.is-integer":187,"./modules/es6.number.is-nan":188,"./modules/es6.number.is-safe-integer":189,"./modules/es6.number.max-safe-integer":190,"./modules/es6.number.min-safe-integer":191,"./modules/es6.number.parse-float":192,"./modules/es6.number.parse-int":193,"./modules/es6.number.to-fixed":194,"./modules/es6.number.to-precision":195,"./modules/es6.object.assign":196,"./modules/es6.object.create":197,"./modules/es6.object.define-properties":198,"./modules/es6.object.define-property":199,"./modules/es6.object.freeze":200,"./modules/es6.object.get-own-property-descriptor":201,"./modules/es6.object.get-own-property-names":202,"./modules/es6.object.get-prototype-of":203,"./modules/es6.object.is":207,"./modules/es6.object.is-extensible":204,"./modules/es6.object.is-frozen":205,"./modules/es6.object.is-sealed":206,"./modules/es6.object.keys":208,"./modules/es6.object.prevent-extensions":209,"./modules/es6.object.seal":210,"./modules/es6.object.set-prototype-of":211,"./modules/es6.object.to-string":212,"./modules/es6.parse-float":213,"./modules/es6.parse-int":214,"./modules/es6.promise":215,"./modules/es6.reflect.apply":216,"./modules/es6.reflect.construct":217,"./modules/es6.reflect.define-property":218,"./modules/es6.reflect.delete-property":219,"./modules/es6.reflect.enumerate":220,"./modules/es6.reflect.get":223,"./modules/es6.reflect.get-own-property-descriptor":221,"./modules/es6.reflect.get-prototype-of":222,"./modules/es6.reflect.has":224,"./modules/es6.reflect.is-extensible":225,"./modules/es6.reflect.own-keys":226,"./modules/es6.reflect.prevent-extensions":227,"./modules/es6.reflect.set":229,"./modules/es6.reflect.set-prototype-of":228,"./modules/es6.regexp.constructor":230,"./modules/es6.regexp.flags":231,"./modules/es6.regexp.match":232,"./modules/es6.regexp.replace":233,"./modules/es6.regexp.search":234,"./modules/es6.regexp.split":235,"./modules/es6.regexp.to-string":236,"./modules/es6.set":237,"./modules/es6.string.anchor":238,"./modules/es6.string.big":239,"./modules/es6.string.blink":240,"./modules/es6.string.bold":241,"./modules/es6.string.code-point-at":242,"./modules/es6.string.ends-with":243,"./modules/es6.string.fixed":244,"./modules/es6.string.fontcolor":245,"./modules/es6.string.fontsize":246,"./modules/es6.string.from-code-point":247,"./modules/es6.string.includes":248,"./modules/es6.string.italics":249,"./modules/es6.string.iterator":250,"./modules/es6.string.link":251,"./modules/es6.string.raw":252,"./modules/es6.string.repeat":253,"./modules/es6.string.small":254,"./modules/es6.string.starts-with":255,"./modules/es6.string.strike":256,"./modules/es6.string.sub":257,"./modules/es6.string.sup":258,"./modules/es6.string.trim":259,"./modules/es6.symbol":260,"./modules/es6.typed.array-buffer":261,"./modules/es6.typed.data-view":262,"./modules/es6.typed.float32-array":263,"./modules/es6.typed.float64-array":264,"./modules/es6.typed.int16-array":265,"./modules/es6.typed.int32-array":266,"./modules/es6.typed.int8-array":267,"./modules/es6.typed.uint16-array":268,"./modules/es6.typed.uint32-array":269,"./modules/es6.typed.uint8-array":270,"./modules/es6.typed.uint8-clamped-array":271,"./modules/es6.weak-map":272,"./modules/es6.weak-set":273,"./modules/es7.array.flat-map":274,"./modules/es7.array.flatten":275,"./modules/es7.array.includes":276,"./modules/es7.asap":277,"./modules/es7.error.is-error":278,"./modules/es7.global":279,"./modules/es7.map.from":280,"./modules/es7.map.of":281,"./modules/es7.map.to-json":282,"./modules/es7.math.clamp":283,"./modules/es7.math.deg-per-rad":284,"./modules/es7.math.degrees":285,"./modules/es7.math.fscale":286,"./modules/es7.math.iaddh":287,"./modules/es7.math.imulh":288,"./modules/es7.math.isubh":289,"./modules/es7.math.rad-per-deg":290,"./modules/es7.math.radians":291,"./modules/es7.math.scale":292,"./modules/es7.math.signbit":293,"./modules/es7.math.umulh":294,"./modules/es7.object.define-getter":295,"./modules/es7.object.define-setter":296,"./modules/es7.object.entries":297,"./modules/es7.object.get-own-property-descriptors":298,"./modules/es7.object.lookup-getter":299,"./modules/es7.object.lookup-setter":300,"./modules/es7.object.values":301,"./modules/es7.observable":302,"./modules/es7.promise.finally":303,"./modules/es7.promise.try":304,"./modules/es7.reflect.define-metadata":305,"./modules/es7.reflect.delete-metadata":306,"./modules/es7.reflect.get-metadata":308,"./modules/es7.reflect.get-metadata-keys":307,"./modules/es7.reflect.get-own-metadata":310,"./modules/es7.reflect.get-own-metadata-keys":309,"./modules/es7.reflect.has-metadata":311,"./modules/es7.reflect.has-own-metadata":312,"./modules/es7.reflect.metadata":313,"./modules/es7.set.from":314,"./modules/es7.set.of":315,"./modules/es7.set.to-json":316,"./modules/es7.string.at":317,"./modules/es7.string.match-all":318,"./modules/es7.string.pad-end":319,"./modules/es7.string.pad-start":320,"./modules/es7.string.trim-left":321,"./modules/es7.string.trim-right":322,"./modules/es7.symbol.async-iterator":323,"./modules/es7.symbol.observable":324,"./modules/es7.system.global":325,"./modules/es7.weak-map.from":326,"./modules/es7.weak-map.of":327,"./modules/es7.weak-set.from":328,"./modules/es7.weak-set.of":329,"./modules/web.dom.iterable":330,"./modules/web.immediate":331,"./modules/web.timers":332}],334:[function(require,module,exports){
-'use strict';
-
-/**
- * this queue tracks the currently running database-interactions
- * so we know when the database is in idle-state and can call
- * requestIdlePromise for semi-important actions
- */
-
-/**
- * Creates a new Idle-Queue
- * @constructor
- * @param {number} [parallels=1] amount of parrallel runs of the limited-ressource
- */
-var IdleQueue = function IdleQueue() {
-    var parallels = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 1;
-
-    this._parallels = parallels || 1;
-
-    /**
-     * each lock() increased this number
-     * each unlock() decreases this number
-     * If _queueCounter==0, the state is in idle
-     * @type {Number}
-     */
-    this._queueCounter = 0;
-
-    /**
-     * contains all promises that where added via requestIdlePromise()
-     * and not have been resolved
-     * @type {Set<Promise>} _idleCalls with oldest promise first
-     */
-    this._idleCalls = new Set();
-
-    this._lastHandleNumber = 0;
-
-    /**
-     * Contains the handleNumber on the left
-     * And the assigned promise on the right.
-     * This is stored so you can use cancelIdleCallback(handleNumber)
-     * to stop executing the callback.
-     * @type {Map<Number><Promise>}
-     */
-    this._handlePromiseMap = new Map();
-    this._promiseHandleMap = new Map();
-};
-
-IdleQueue.prototype = {
-    isIdle: function isIdle() {
-        return this._queueCounter < this._parallels;
-    },
-    _newHandleNumber: function _newHandleNumber() {
-        this._lastHandleNumber++;
-        return this._lastHandleNumber;
-    },
-
-
-    /**
-     * creates a lock in the queue
-     * and returns an unlock-function to remove the lock from the queue
-     * @return {function} unlock function than must be called afterwards
-     */
-    lock: function lock() {
-        this._queueCounter++;
-    },
-    unlock: function unlock() {
-        this._queueCounter--;
-        this._tryIdleCall();
-    },
-
-
-    /**
-     * wraps a function with lock/unlock and runs it
-     * @param  {function}  fun
-     * @return {Promise<any>}
-     */
-    wrapCall: function wrapCall(fun) {
-        var _this = this;
-
-        this.lock();
-
-        var maybePromise = void 0;
-        try {
-            maybePromise = fun();
-        } catch (err) {
-            this.unlock();
-            throw err;
-        }
-
-        if (!maybePromise.then || typeof maybePromise.then !== 'function') {
-            // no promise
-            this.unlock();
-            return maybePromise;
-        } else {
-            // promise
-            return maybePromise.then(function (ret) {
-                // sucessfull -> unlock before return
-                _this.unlock();
-                return ret;
-            })['catch'](function (err) {
-                // not sucessfull -> unlock before throwing
-                _this.unlock();
-                throw err;
-            });
-        }
-    },
-
-
-    /**
-     * does the same as requestIdleCallback() but uses promises instead of the callback
-     * @param {{timeout?: number}} options like timeout
-     * @return {Promise<void>} promise that resolves when the database is in idle-mode
-     */
-    requestIdlePromise: function requestIdlePromise(options) {
-        var _this2 = this;
-
-        options = options || {};
-        var resolve = void 0;
-
-        var prom = new Promise(function (res) {
-            return resolve = res;
-        });
-        var resolveFromOutside = function resolveFromOutside() {
-            _this2._removeIdlePromise(prom);
-            resolve();
-        };
-
-        prom._resolveFromOutside = resolveFromOutside;
-
-        if (options.timeout) {
-            // if timeout has passed, resolve promise even if not idle
-            var timeoutObj = setTimeout(function () {
-                prom._resolveFromOutside();
-            }, options.timeout);
-            prom._timeoutObj = timeoutObj;
-        }
-
-        this._idleCalls.add(prom);
-
-        this._tryIdleCall();
-        return prom;
-    },
-
-    /**
-     * remove the promise so it will never be resolved
-     * @param  {Promise} promise from requestIdlePromise()
-     * @return {void}
-     */
-    cancelIdlePromise: function cancelIdlePromise(promise) {
-        this._removeIdlePromise(promise);
-    },
-
-
-    /**
-     * removes the promise from the queue and maps and also its corresponding handle-number
-     * @param  {Promise} promise from requestIdlePromise()
-     * @return {void}
-     */
-    _removeIdlePromise: function _removeIdlePromise(promise) {
-        if (!promise) return;
-
-        // remove timeout if exists
-        if (promise._timeoutObj) clearTimeout(promise._timeoutObj);
-
-        // remove handle-nr if exists
-        if (this._promiseHandleMap.has(promise)) {
-            var handle = this._promiseHandleMap.get(promise);
-            this._handlePromiseMap['delete'](handle);
-            this._promiseHandleMap['delete'](promise);
-        }
-
-        // remove from queue
-        this._idleCalls['delete'](promise);
-    },
-
-
-    /**
-     * api equal to
-     * @link https://developer.mozilla.org/en-US/docs/Web/API/Window/requestIdleCallback
-     * @param  {Function} callback
-     * @param  {options}   options  [description]
-     * @return {number} handle which can be used with cancelIdleCallback()
-     */
-    requestIdleCallback: function requestIdleCallback(callback, options) {
-        var handle = this._newHandleNumber();
-        var promise = this.requestIdlePromise(options);
-
-        this._handlePromiseMap.set(handle, promise);
-        this._promiseHandleMap.set(promise, handle);
-
-        promise.then(function () {
-            return callback();
-        });
-
-        return handle;
-    },
-
-
-    /**
-     * API equal to
-     * @link https://developer.mozilla.org/en-US/docs/Web/API/Window/cancelIdleCallback
-     * @param  {number} handle returned from requestIdleCallback()
-     * @return {void}
-     */
-    cancelIdleCallback: function cancelIdleCallback(handle) {
-        var promise = this._handlePromiseMap.get(handle);
-        this.cancelIdlePromise(promise);
-    },
-
-
-    /**
-     * resolves the last entry of this._idleCalls
-     * but only if the queue is empty
-     * @return {Promise}
-     */
-    _tryIdleCall: function _tryIdleCall() {
-        var _this3 = this;
-
-        // ensure this does not run in parallel
-        if (this._tryIdleCallRunning || this._idleCalls.size === 0) return;
-        this._tryIdleCallRunning = true;
-
-        // w8 one tick
-        setTimeout(function () {
-            // check if queue empty
-            if (!_this3.isIdle()) {
-                _this3._tryIdleCallRunning = false;
-                return;
-            };
-
-            /**
-             * wait 1 tick here
-             * because many functions do IO->CPU->IO
-             * which means the queue is empty for a short time
-             * but the ressource is not idle
-             */
-            setTimeout(function () {
-                // check if queue still empty
-                if (!_this3.isIdle()) {
-                    _this3._tryIdleCallRunning = false;
-                    return;
-                }
-
-                // ressource is idle
-                _this3._resolveOneIdleCall();
-                _this3._tryIdleCallRunning = false;
-            }, 0);
-        }, 0);
-    },
-
-
-    /**
-     * processes the oldest call of the idleCalls-queue
-     * @return {Promise<void>}
-     */
-    _resolveOneIdleCall: function _resolveOneIdleCall() {
-        var _this4 = this;
-
-        if (this._idleCalls.size === 0) return;
-
-        var iterator = this._idleCalls.values();
-        var oldestPromise = iterator.next().value;
-
-        oldestPromise._resolveFromOutside();
-
-        // try to call the next tick
-        setTimeout(function () {
-            return _this4._tryIdleCall();
-        }, 0);
-    },
-
-
-    /**
-     * clears and resets everything
-     * @return {void}
-     */
-    clear: function clear() {
-        var _this5 = this;
-
-        // remove all non-cleared
-        this._idleCalls.forEach(function (promise) {
-            return _this5._removeIdlePromise(promise);
-        });
-
-        this._queueCounter = 0;
-        this._idleCalls.clear();
-        this._handlePromiseMap = new Map();
-        this._promiseHandleMap = new Map();
-    }
-};
-
-module.exports = IdleQueue;
-},{}],335:[function(require,module,exports){
 (function (global){
 module.exports = false;
 
@@ -8589,245 +8264,7 @@ try {
 } catch(e) {}
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],336:[function(require,module,exports){
-// shim for using process in browser
-var process = module.exports = {};
-
-// cached from whatever global is present so that test runners that stub it
-// don't break things.  But we need to wrap it in a try catch in case it is
-// wrapped in strict mode code which doesn't define any globals.  It's inside a
-// function because try/catches deoptimize in certain engines.
-
-var cachedSetTimeout;
-var cachedClearTimeout;
-
-function defaultSetTimout() {
-    throw new Error('setTimeout has not been defined');
-}
-function defaultClearTimeout () {
-    throw new Error('clearTimeout has not been defined');
-}
-(function () {
-    try {
-        if (typeof setTimeout === 'function') {
-            cachedSetTimeout = setTimeout;
-        } else {
-            cachedSetTimeout = defaultSetTimout;
-        }
-    } catch (e) {
-        cachedSetTimeout = defaultSetTimout;
-    }
-    try {
-        if (typeof clearTimeout === 'function') {
-            cachedClearTimeout = clearTimeout;
-        } else {
-            cachedClearTimeout = defaultClearTimeout;
-        }
-    } catch (e) {
-        cachedClearTimeout = defaultClearTimeout;
-    }
-} ())
-function runTimeout(fun) {
-    if (cachedSetTimeout === setTimeout) {
-        //normal enviroments in sane situations
-        return setTimeout(fun, 0);
-    }
-    // if setTimeout wasn't available but was latter defined
-    if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
-        cachedSetTimeout = setTimeout;
-        return setTimeout(fun, 0);
-    }
-    try {
-        // when when somebody has screwed with setTimeout but no I.E. maddness
-        return cachedSetTimeout(fun, 0);
-    } catch(e){
-        try {
-            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
-            return cachedSetTimeout.call(null, fun, 0);
-        } catch(e){
-            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
-            return cachedSetTimeout.call(this, fun, 0);
-        }
-    }
-
-
-}
-function runClearTimeout(marker) {
-    if (cachedClearTimeout === clearTimeout) {
-        //normal enviroments in sane situations
-        return clearTimeout(marker);
-    }
-    // if clearTimeout wasn't available but was latter defined
-    if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
-        cachedClearTimeout = clearTimeout;
-        return clearTimeout(marker);
-    }
-    try {
-        // when when somebody has screwed with setTimeout but no I.E. maddness
-        return cachedClearTimeout(marker);
-    } catch (e){
-        try {
-            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
-            return cachedClearTimeout.call(null, marker);
-        } catch (e){
-            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
-            // Some versions of I.E. have different rules for clearTimeout vs setTimeout
-            return cachedClearTimeout.call(this, marker);
-        }
-    }
-
-
-
-}
-var queue = [];
-var draining = false;
-var currentQueue;
-var queueIndex = -1;
-
-function cleanUpNextTick() {
-    if (!draining || !currentQueue) {
-        return;
-    }
-    draining = false;
-    if (currentQueue.length) {
-        queue = currentQueue.concat(queue);
-    } else {
-        queueIndex = -1;
-    }
-    if (queue.length) {
-        drainQueue();
-    }
-}
-
-function drainQueue() {
-    if (draining) {
-        return;
-    }
-    var timeout = runTimeout(cleanUpNextTick);
-    draining = true;
-
-    var len = queue.length;
-    while(len) {
-        currentQueue = queue;
-        queue = [];
-        while (++queueIndex < len) {
-            if (currentQueue) {
-                currentQueue[queueIndex].run();
-            }
-        }
-        queueIndex = -1;
-        len = queue.length;
-    }
-    currentQueue = null;
-    draining = false;
-    runClearTimeout(timeout);
-}
-
-process.nextTick = function (fun) {
-    var args = new Array(arguments.length - 1);
-    if (arguments.length > 1) {
-        for (var i = 1; i < arguments.length; i++) {
-            args[i - 1] = arguments[i];
-        }
-    }
-    queue.push(new Item(fun, args));
-    if (queue.length === 1 && !draining) {
-        runTimeout(drainQueue);
-    }
-};
-
-// v8 likes predictible objects
-function Item(fun, array) {
-    this.fun = fun;
-    this.array = array;
-}
-Item.prototype.run = function () {
-    this.fun.apply(null, this.array);
-};
-process.title = 'browser';
-process.browser = true;
-process.env = {};
-process.argv = [];
-process.version = ''; // empty string to avoid regexp issues
-process.versions = {};
-
-function noop() {}
-
-process.on = noop;
-process.addListener = noop;
-process.once = noop;
-process.off = noop;
-process.removeListener = noop;
-process.removeAllListeners = noop;
-process.emit = noop;
-process.prependListener = noop;
-process.prependOnceListener = noop;
-
-process.listeners = function (name) { return [] }
-
-process.binding = function (name) {
-    throw new Error('process.binding is not supported');
-};
-
-process.cwd = function () { return '/' };
-process.chdir = function (dir) {
-    throw new Error('process.chdir is not supported');
-};
-process.umask = function() { return 0; };
-
-},{}],337:[function(require,module,exports){
-'use strict';
-module.exports = function (min, max) {
-	if (max === undefined) {
-		max = min;
-		min = 0;
-	}
-
-	if (typeof min !== 'number' || typeof max !== 'number') {
-		throw new TypeError('Expected all arguments to be numbers');
-	}
-
-	return Math.floor(Math.random() * (max - min + 1) + min);
-};
-
-},{}],338:[function(require,module,exports){
-void function(root){
-
-    // return a number between 0 and max-1
-    function r(max){ return Math.floor(Math.random()*max) }
-
-    function generate(salt, size){
-        var key = ''
-        var sl = salt.length
-        while ( size -- ) {
-            var rnd = r(sl)
-            key += salt[rnd]
-        }
-        return key
-    }
-
-    var rndtok = function(salt, size){
-        return isNaN(size) ? undefined :
-               size < 1    ? undefined : generate(salt, size)
-
-    }
-
-    rndtok.gen = createGenerator
-
-    function createGenerator(salt){
-        salt = typeof salt  == 'string' && salt.length > 0 ? salt :  'abcdefghijklmnopqrstuvwxzy0123456789'
-        var temp = rndtok.bind(rndtok, salt)
-        temp.salt = function(){ return salt }
-        temp.create = createGenerator
-        temp.gen = createGenerator
-        return temp
-    }
-
-    module.exports = createGenerator()
-
-}(this)
-
-},{}],339:[function(require,module,exports){
+},{}],335:[function(require,module,exports){
 'use strict';
 
 /* eslint-disable */
@@ -8887,4 +8324,4 @@ self.addEventListener('message', function (e) {
             self.postMessage('Unknown command: ' + data.msg);
     };
 }, false);
-},{"../../dist/lib/index.js":1,"babel-polyfill":8}]},{},[339]);
+},{"../../dist/lib/index.js":1,"babel-polyfill":8}]},{},[335]);

@@ -7,11 +7,10 @@
  */
 
 var isNode = require('detect-node');
-var randomToken = require('random-token');
 
 import { fillOptionsWithDefaults } from '../options';
 
-import { sleep } from '../util';
+import { sleep, randomToken } from '../util';
 
 var KEY_PREFIX = 'pubkey.broadcastChannel-';
 export var type = 'localstorage';

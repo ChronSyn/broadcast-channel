@@ -13,7 +13,6 @@ exports.removeMessageById = removeMessageById;
 exports.getOldMessages = getOldMessages;
 exports.cleanOldMessages = cleanOldMessages;
 exports.create = create;
-exports.handleMessagePing = handleMessagePing;
 exports.close = close;
 exports.postMessage = postMessage;
 exports.onMessage = onMessage;
@@ -27,14 +26,9 @@ var _options = require('../options');
  * this method uses indexeddb to store the messages
  * There is currently no observerAPI for idb
  * @link https://github.com/w3c/IndexedDB/issues/51
- * So we use the localstorage 'storage'-event
- * to ping other tabs when a message comes in
  */
 
 var isNode = require('detect-node');
-var randomToken = require('random-token');
-var randomInt = require('random-int');
-var IdleQueue = require('custom-idle-queue');
 
 var DB_PREFIX = 'pubkey.broadcast-channel-0-';
 var OBJECT_STORE_ID = 'messages';
@@ -183,10 +177,7 @@ function cleanOldMessages(db, ttl) {
 function create(channelName, options) {
     options = (0, _options.fillOptionsWithDefaults)(options);
 
-    var uuid = randomToken(10);
-
-    // ensures we do not read messages in parrallel
-    var readQueue = new IdleQueue(1);
+    var uuid = (0, _util.randomToken)(10);
 
     return createDatabase(channelName).then(function (db) {
         var state = {
@@ -198,7 +189,7 @@ function create(channelName, options) {
             // contains all messages that have been emitted before
             emittedMessagesIds: new Set(),
             messagesCallback: null,
-            readQueue: readQueue,
+            readQueuePromises: [],
             db: db
         };
 
@@ -216,7 +207,7 @@ function create(channelName, options) {
 function _readLoop(state) {
     if (state.closed) return;
 
-    return handleMessagePing(state).then(function () {
+    return readNewMessages(state).then(function () {
         return (0, _util.sleep)(state.options.idb.fallbackInterval);
     }).then(function () {
         return _readLoop(state);
@@ -224,29 +215,9 @@ function _readLoop(state) {
 }
 
 /**
- * when the storage-event pings, so that we now new messages came,
- * run this
+ * reads all new messages from the database and emits them
  */
-function handleMessagePing(state) {
-    /**
-     * when there are no listener, we do nothing
-     */
-    if (!state.messagesCallback) return Promise.resolve();
-
-    /**
-     * if we have 2 or more read-tasks in the queue,
-     * we do not have to set more
-     */
-    if (state.readQueue._idleCalls.size > 1) return Promise.resolve();
-
-    return state.readQueue.requestIdlePromise().then(function () {
-        return state.readQueue.wrapCall(function () {
-            return _handleMessagePingInner(state);
-        });
-    });
-}
-
-function _handleMessagePingInner(state) {
+function readNewMessages(state) {
     return getMessagesHigherThen(state.db, state.lastCursorId).then(function (newerMessages) {
         var useMessages = newerMessages.map(function (msgObj) {
             if (msgObj.id > state.lastCursorId) {
@@ -284,13 +255,12 @@ function _handleMessagePingInner(state) {
 
 function close(channelState) {
     channelState.closed = true;
-    channelState.readQueue.clear();
     channelState.db.close();
 }
 
 function postMessage(channelState, messageJson) {
     return writeMessage(channelState.db, channelState.uuid, messageJson).then(function () {
-        if (randomInt(0, 10) === 0) {
+        if ((0, _util.randomInt)(0, 10) === 0) {
             /* await (do not await) */cleanOldMessages(channelState.db, channelState.options.idb.ttl);
         }
     });
@@ -299,7 +269,7 @@ function postMessage(channelState, messageJson) {
 function onMessage(channelState, fn, time) {
     channelState.messagesCallbackTime = time;
     channelState.messagesCallback = fn;
-    handleMessagePing(channelState);
+    readNewMessages(channelState);
 }
 
 function canBeUsed() {

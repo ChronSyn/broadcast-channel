@@ -213,7 +213,7 @@ var writeMessage = exports.writeMessage = function () {
                             time: time,
                             data: messageJson
                         };
-                        token = (0, _randomToken2['default'])(12);
+                        token = (0, _util2.randomToken)(12);
                         fileName = time + '_' + readerUuid + '_' + token + '.json';
                         msgPath = path.join(getPaths(channelName).messages, fileName);
                         _context5.next = 7;
@@ -418,7 +418,7 @@ var create = exports.create = function () {
                         return ensureFoldersExist(channelName);
 
                     case 3:
-                        uuid = (0, _randomToken2['default'])(10);
+                        uuid = (0, _util2.randomToken)(10);
                         _context12.next = 6;
                         return Promise.all([getReadersUuids(channelName), createSocketEventEmitter(channelName, uuid), createSocketInfoFile(channelName, uuid)]);
 
@@ -804,7 +804,7 @@ var postMessage = exports.postMessage = function () {
                                             }));
 
                                         case 8:
-                                            if (!((0, _randomInt2['default'])(0, 10) === 0)) {
+                                            if (!((0, _util2.randomInt)(0, 10) === 0)) {
                                                 _context18.next = 14;
                                                 break;
                                             }
@@ -876,6 +876,7 @@ var close = exports.close = function () {
     };
 }();
 
+exports.cleanPipeName = cleanPipeName;
 exports.getPaths = getPaths;
 exports.socketPath = socketPath;
 exports.socketInfoPath = socketInfoPath;
@@ -913,14 +914,6 @@ var _detectNode = require('detect-node');
 
 var _detectNode2 = _interopRequireDefault(_detectNode);
 
-var _randomToken = require('random-token');
-
-var _randomToken2 = _interopRequireDefault(_randomToken);
-
-var _randomInt = require('random-int');
-
-var _randomInt2 = _interopRequireDefault(_randomInt);
-
 var _customIdleQueue = require('custom-idle-queue');
 
 var _customIdleQueue2 = _interopRequireDefault(_customIdleQueue);
@@ -938,9 +931,23 @@ function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj;
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 
 /**
+ * windows sucks, so we have handle windows-type of socket-paths
+ * @link https://gist.github.com/domenic/2790533#gistcomment-331356
+ */
+/**
  * this method is used in nodejs-environments.
  * The ipc is handled via sockets and file-writes to the tmp-folder
  */
+
+function cleanPipeName(str) {
+    if (process.platform === 'win32' && !str.startsWith('\\\\.\\pipe\\')) {
+        str = str.replace(/^\//, '');
+        str = str.replace(/\//g, '-');
+        return '\\\\.\\pipe\\' + str;
+    } else {
+        return str;
+    }
+};
 
 var mkdir = util.promisify(fs.mkdir);
 var writeFile = util.promisify(fs.writeFile);
@@ -971,7 +978,7 @@ function socketPath(channelName, readerUuid) {
 
     var paths = getPaths(channelName);
     var socketPath = path.join(paths.readers, readerUuid + '.s');
-    return (0, _util2.cleanPipeName)(socketPath);
+    return cleanPipeName(socketPath);
 }
 
 function socketInfoPath(channelName, readerUuid) {

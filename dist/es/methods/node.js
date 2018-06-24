@@ -14,14 +14,26 @@ import * as path from 'path';
 import { sha3_224 } from 'js-sha3';
 
 import isNode from 'detect-node';
-import randomToken from 'random-token';
-import randomInt from 'random-int';
 import IdleQueue from 'custom-idle-queue';
 import unload from 'unload';
 
 import { fillOptionsWithDefaults } from '../options';
 
-import { cleanPipeName } from '../util';
+import { randomInt, randomToken } from '../util';
+
+/**
+ * windows sucks, so we have handle windows-type of socket-paths
+ * @link https://gist.github.com/domenic/2790533#gistcomment-331356
+ */
+export function cleanPipeName(str) {
+    if (process.platform === 'win32' && !str.startsWith('\\\\.\\pipe\\')) {
+        str = str.replace(/^\//, '');
+        str = str.replace(/\//g, '-');
+        return '\\\\.\\pipe\\' + str;
+    } else {
+        return str;
+    }
+};
 
 var mkdir = util.promisify(fs.mkdir);
 var writeFile = util.promisify(fs.writeFile);

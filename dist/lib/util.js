@@ -4,8 +4,9 @@ Object.defineProperty(exports, "__esModule", {
     value: true
 });
 exports.isPromise = isPromise;
-exports.cleanPipeName = cleanPipeName;
 exports.sleep = sleep;
+exports.randomInt = randomInt;
+exports.randomToken = randomToken;
 /**
  * returns true if the given object is a promise
  */
@@ -17,23 +18,25 @@ function isPromise(obj) {
     }
 }
 
-/**
- * windows sucks
- * @link https://gist.github.com/domenic/2790533#gistcomment-331356
- */
-function cleanPipeName(str) {
-    if (process.platform === 'win32' && !str.startsWith('\\\\.\\pipe\\')) {
-        str = str.replace(/^\//, '');
-        str = str.replace(/\//g, '-');
-        return '\\\\.\\pipe\\' + str;
-    } else {
-        return str;
-    }
-};
-
 function sleep(time) {
     if (!time) time = 0;
     return new Promise(function (res) {
         return setTimeout(res, time);
     });
+}
+
+function randomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1) + min);
+}
+
+/**
+ * https://stackoverflow.com/a/1349426/3443137
+ */
+function randomToken(length) {
+    var text = '';
+    var possible = 'abcdefghijklmnopqrstuvwxzy0123456789';
+
+    for (var i = 0; i < 5; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }return text;
 }
