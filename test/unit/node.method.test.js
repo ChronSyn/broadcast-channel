@@ -71,7 +71,7 @@ describe('unit/node.method.test.js', () => {
             const client = new net.Socket();
             await new Promise(res => {
                 client.connect(
-                    util.cleanPipeName(socket.path),
+                    NodeMethod.cleanPipeName(socket.path),
                     () => {
                         res();
                     }
